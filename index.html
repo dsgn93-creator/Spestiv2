@@ -1,0 +1,1537 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8"/>
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
+  <title>Spesti — Smart Grocery Comparison Bulgaria</title>
+  <meta name="description" content="Compare grocery prices across supermarkets in Bulgaria. Save money every week with smart store-by-store shopping plans."/>
+  <meta property="og:title" content="Spesti — Smart Grocery Comparison · Bulgaria"/>
+  <meta property="og:description" content="Find the cheapest grocery store near you. Compare Kaufland, Lidl, Billa, Fantastico & more."/>
+  <meta property="og:type" content="website"/>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛒</text></svg>"/>
+  <link rel="preconnect" href="https://fonts.googleapis.com"/>
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+  <link href="https://fonts.googleapis.com/css2?family=Playfair+Display:wght@400;700;900&family=Source+Sans+3:wght@300;400;600;700;800&display=swap" rel="stylesheet"/>
+  <style>
+    *{box-sizing:border-box;margin:0;padding:0}
+    html,body{height:100%;background:#05090F;color:#EDE5D0}
+    #root{min-height:100vh}
+    ::-webkit-scrollbar{width:4px;height:4px}
+    ::-webkit-scrollbar-track{background:#060E1A}
+    ::-webkit-scrollbar-thumb{background:#1F2D45;border-radius:2px}
+  </style>
+</head>
+<body>
+  <div id="root"><div style="display:flex;align-items:center;justify-content:center;min-height:100vh;font-family:sans-serif;color:#4A5A75;font-size:18px">Loading Spesti…</div></div>
+
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+
+  <script type="text/babel">
+const { useState, useEffect, useMemo, useCallback } = React;
+
+// ─── HAVERSINE DISTANCE ──────────────────────────────────────────────────────
+function distKm(lat1,lon1,lat2,lon2){
+  const R=6371, dLat=(lat2-lat1)*Math.PI/180, dLon=(lon2-lon1)*Math.PI/180;
+  const a=Math.sin(dLat/2)**2+Math.cos(lat1*Math.PI/180)*Math.cos(lat2*Math.PI/180)*Math.sin(dLon/2)**2;
+  return R*2*Math.atan2(Math.sqrt(a),Math.sqrt(1-a));
+}
+
+// ─── ALL BULGARIAN CHAINS ─────────────────────────────────────────────────────
+// status: "live" = in app now, "soon" = coming soon
+const ALL_CHAINS = [
+  { id:"kaufland",   name:"Kaufland",   color:"#E30613", country:"DE", stores:69,  status:"live", desc:"German hypermarket · 69 stores across Bulgaria" },
+  { id:"lidl",       name:"Lidl",       color:"#0050AA", country:"DE", stores:95,  status:"live", desc:"German discount chain · 95 stores · largest in BG" },
+  { id:"billa",      name:"Billa",      color:"#E3000B", country:"AT", stores:157, status:"live", desc:"Austrian supermarket · 157 stores nationwide" },
+  { id:"fantastico", name:"Fantastico", color:"#00873D", country:"BG", stores:45,  status:"live", desc:"Bulgarian chain · 45 stores · Sofia & major cities" },
+  { id:"tmarket",    name:"T Market",   color:"#D4000F", country:"LT", stores:115, status:"live", desc:"115 stores · affordable everyday prices" },
+  { id:"metro",      name:"Metro",      color:"#003F8A", country:"DE", stores:11,  status:"live", desc:"German wholesale · 11 stores · bulk buying" },
+  { id:"cba",        name:"CBA",        color:"#C8102E", country:"BG", stores:127, status:"live", desc:"Bulgarian franchise · 127 neighbourhood stores" },
+  { id:"penny",      name:"Penny",      color:"#CC0000", country:"DE", stores:49,  status:"live", desc:"German discount · hard-discount pricing" },
+  { id:"hit",        name:"HIT",        color:"#FF6B00", country:"BG", stores:2,   status:"soon", desc:"Bulgarian hypermarket · Sofia only" },
+  { id:"kam",        name:"Kam Market", color:"#006633", country:"BG", stores:24,  status:"soon", desc:"Local Bulgarian chain · affordable staples" },
+  { id:"dar",        name:"Dar",        color:"#004A99", country:"BG", stores:10,  status:"soon", desc:"Sofia-based neighbourhood stores" },
+  { id:"leksi",      name:"Leksi",      color:"#FF4400", country:"BG", stores:4,   status:"soon", desc:"Small local chain" },
+  { id:"auchan",     name:"Auchan",     color:"#E2231A", country:"FR", stores:0,   status:"future",desc:"French hypermarket · potential BG expansion" },
+  { id:"carrefour",  name:"Carrefour",  color:"#005BBB", country:"FR", stores:13,  status:"future",desc:"French chain · limited BG presence" },
+];
+
+// ─── STORE LOCATIONS (representative coordinates per city) ──────────────────
+// Real approximate GPS for major store locations across Bulgaria
+const STORE_LOCATIONS = [
+  // SOFIA (many stores)
+  {chain:"kaufland",   lat:42.6977, lon:23.3219, city:"Sofia",        address:"bul. Tsarigradsko shose 115"},
+  {chain:"kaufland",   lat:42.6833, lon:23.3200, city:"Sofia",        address:"bul. Bulgaria 102"},
+  {chain:"kaufland",   lat:42.7200, lon:23.2800, city:"Sofia",        address:"Lyulin"},
+  {chain:"kaufland",   lat:42.6650, lon:23.2950, city:"Sofia",        address:"Mladost 1"},
+  {chain:"lidl",       lat:42.6900, lon:23.3350, city:"Sofia",        address:"bul. Aleksandar Malinov"},
+  {chain:"lidl",       lat:42.7100, lon:23.3100, city:"Sofia",        address:"Nadezhda"},
+  {chain:"lidl",       lat:42.6750, lon:23.2700, city:"Sofia",        address:"Studentski grad"},
+  {chain:"billa",      lat:42.6943, lon:23.3242, city:"Sofia",        address:"ul. Alabin 56"},
+  {chain:"billa",      lat:42.7050, lon:23.3100, city:"Sofia",        address:"bul. Slivnitsa"},
+  {chain:"billa",      lat:42.6650, lon:23.3500, city:"Sofia",        address:"Drujba"},
+  {chain:"billa",      lat:42.7200, lon:23.2900, city:"Sofia",        address:"Lyulin Mall"},
+  {chain:"fantastico", lat:42.6977, lon:23.3400, city:"Sofia",        address:"bul. Vitosha 45"},
+  {chain:"fantastico", lat:42.6820, lon:23.3180, city:"Sofia",        address:"Yavorov"},
+  {chain:"fantastico", lat:42.7020, lon:23.3050, city:"Sofia",        address:"Oborishte"},
+  {chain:"fantastico", lat:42.7150, lon:23.3300, city:"Sofia",        address:"Lozenets"},
+  {chain:"tmarket",    lat:42.6950, lon:23.3150, city:"Sofia",        address:"bul. Hristo Botev"},
+  {chain:"tmarket",    lat:42.7100, lon:23.2950, city:"Sofia",        address:"Nadezhda 3"},
+  {chain:"metro",      lat:42.7400, lon:23.3500, city:"Sofia",        address:"Tsarigradsko 231A"},
+  {chain:"hit",        lat:42.6500, lon:23.3050, city:"Sofia",        address:"Mladost 1A"},
+  // PLOVDIV
+  {chain:"kaufland",   lat:42.1500, lon:24.7550, city:"Plovdiv",      address:"bul. Maritza 122"},
+  {chain:"kaufland",   lat:42.1350, lon:24.7300, city:"Plovdiv",      address:"Trakiya"},
+  {chain:"lidl",       lat:42.1480, lon:24.7480, city:"Plovdiv",      address:"bul. Hristo Botev"},
+  {chain:"lidl",       lat:42.1600, lon:24.7650, city:"Plovdiv",      address:"Kamenitsa"},
+  {chain:"billa",      lat:42.1520, lon:24.7520, city:"Plovdiv",      address:"ul. Knyaz Alexandar I"},
+  {chain:"billa",      lat:42.1400, lon:24.7400, city:"Plovdiv",      address:"Trakiya mall"},
+  {chain:"tmarket",    lat:42.1450, lon:24.7480, city:"Plovdiv",      address:"Plovdiv center"},
+  // VARNA
+  {chain:"kaufland",   lat:43.2141, lon:27.9147, city:"Varna",        address:"bul. Vladislav Varnenchik"},
+  {chain:"kaufland",   lat:43.2050, lon:27.8900, city:"Varna",        address:"Chataldzha"},
+  {chain:"lidl",       lat:43.2200, lon:27.9200, city:"Varna",        address:"bul. Slivnitsa"},
+  {chain:"billa",      lat:43.2141, lon:27.9100, city:"Varna",        address:"Golden Store"},
+  {chain:"billa",      lat:43.2300, lon:27.9400, city:"Varna",        address:"Vinitsa"},
+  {chain:"tmarket",    lat:43.2100, lon:27.9150, city:"Varna",        address:"bul. Tsar Simeon I"},
+  // BURGAS
+  {chain:"kaufland",   lat:42.5048, lon:27.4626, city:"Burgas",       address:"bul. Demokratsiya"},
+  {chain:"lidl",       lat:42.5100, lon:27.4700, city:"Burgas",       address:"bul. Industrialna"},
+  {chain:"billa",      lat:42.5000, lon:27.4600, city:"Burgas",       address:"ul. Konstantinova"},
+  {chain:"tmarket",    lat:42.5050, lon:27.4650, city:"Burgas",       address:"Burgas center"},
+  // RUSE
+  {chain:"kaufland",   lat:43.8485, lon:25.9536, city:"Ruse",         address:"bul. Tutrakan"},
+  {chain:"lidl",       lat:43.8400, lon:25.9600, city:"Ruse",         address:"bul. Lipnik"},
+  {chain:"billa",      lat:43.8450, lon:25.9550, city:"Ruse",         address:"pl. Svoboda"},
+  // STARA ZAGORA
+  {chain:"kaufland",   lat:42.4257, lon:25.6345, city:"Stara Zagora", address:"bul. Nikola Petkov"},
+  {chain:"lidl",       lat:42.4300, lon:25.6400, city:"Stara Zagora", address:"Stara Zagora center"},
+  {chain:"billa",      lat:42.4250, lon:25.6350, city:"Stara Zagora", address:"ul. Tsar Simeon Veliki"},
+  // PLEVEN
+  {chain:"kaufland",   lat:43.4170, lon:24.6066, city:"Pleven",       address:"bul. Georgi Kochev"},
+  {chain:"lidl",       lat:43.4100, lon:24.6000, city:"Pleven",       address:"Pleven center"},
+  {chain:"billa",      lat:42.4200, lon:24.6100, city:"Pleven",       address:"bul. Rusiya"},
+  // SLIVEN
+  {chain:"kaufland",   lat:42.6866, lon:26.3293, city:"Sliven",       address:"bul. Hadzhi Dimitar"},
+  {chain:"lidl",       lat:42.6900, lon:26.3350, city:"Sliven",       address:"Sliven center"},
+  // BLAGOEVGRAD
+  {chain:"kaufland",   lat:42.0143, lon:23.0942, city:"Blagoevgrad",  address:"ul. Vasil Levski"},
+  {chain:"lidl",       lat:42.0200, lon:23.1000, city:"Blagoevgrad",  address:"Blagoevgrad center"},
+  // VELIKO TARNOVO
+  {chain:"kaufland",   lat:43.0757, lon:25.6172, city:"Veliko Tarnovo",address:"bul. Bulgaria 24"},
+  {chain:"lidl",       lat:43.0800, lon:25.6200, city:"Veliko Tarnovo",address:"VT center"},
+  {chain:"billa",      lat:43.0750, lon:25.6150, city:"Veliko Tarnovo",address:"ul. Vasil Levski"},
+  // SHUMEN
+  {chain:"kaufland",   lat:43.2718, lon:26.9311, city:"Shumen",       address:"bul. Pliska"},
+  {chain:"lidl",       lat:43.2750, lon:26.9350, city:"Shumen",       address:"Shumen center"},
+  // DOBRICH
+  {chain:"kaufland",   lat:43.5688, lon:27.8270, city:"Dobrich",      address:"bul. 25 September"},
+  {chain:"lidl",       lat:43.5700, lon:27.8300, city:"Dobrich",      address:"Dobrich center"},
+  // GABROVO
+  {chain:"lidl",       lat:42.8745, lon:25.3233, city:"Gabrovo",      address:"Gabrovo center"},
+  {chain:"billa",      lat:42.8700, lon:25.3200, city:"Gabrovo",      address:"bul. Treti Mart"},
+];
+
+// ─── STORE LOGOS ─────────────────────────────────────────────────────────────
+const KauflandLogo = ({size=32}) => (
+  <svg width={size} height={size} viewBox="0 0 100 100" fill="none" style={{flexShrink:0,borderRadius:6,display:"block"}}>
+    <rect width="100" height="100" rx="10" fill="#E30613"/>
+    <text x="50" y="70" textAnchor="middle" fill="white" fontSize="58" fontWeight="900" fontFamily="Arial Black,Arial,sans-serif">K</text>
+  </svg>
+);
+const LidlLogo = ({size=32}) => (
+  <svg width={size} height={size} viewBox="0 0 100 100" fill="none" style={{flexShrink:0,borderRadius:6,display:"block"}}>
+    <rect width="100" height="100" rx="10" fill="#0050AA"/>
+    <ellipse cx="50" cy="50" rx="38" ry="38" fill="#FFD700"/>
+    <ellipse cx="50" cy="50" rx="27" ry="27" fill="#E30613"/>
+    <text x="50" y="58" textAnchor="middle" fill="white" fontSize="22" fontWeight="900" fontFamily="Arial,sans-serif" letterSpacing="1">lidl</text>
+  </svg>
+);
+const BillaLogo = ({size=32}) => (
+  <svg width={size} height={size} viewBox="0 0 100 100" fill="none" style={{flexShrink:0,borderRadius:6,display:"block"}}>
+    <rect width="100" height="100" rx="10" fill="#FFD700"/>
+    <text x="50" y="68" textAnchor="middle" fill="#E3000B" fontSize="30" fontWeight="900" fontFamily="Arial Black,Arial,sans-serif">BILLA</text>
+  </svg>
+);
+const FantasticoLogo = ({size=32}) => (
+  <svg width={size} height={size} viewBox="0 0 100 100" fill="none" style={{flexShrink:0,borderRadius:6,display:"block"}}>
+    <rect width="100" height="100" rx="10" fill="#00873D"/>
+    <text x="50" y="42" textAnchor="middle" fill="white" fontSize="18" fontWeight="900" fontFamily="Arial,sans-serif">fan</text>
+    <text x="50" y="65" textAnchor="middle" fill="white" fontSize="18" fontWeight="900" fontFamily="Arial,sans-serif">tastico</text>
+  </svg>
+);
+const TMarketLogo = ({size=32}) => (
+  <svg width={size} height={size} viewBox="0 0 100 100" fill="none" style={{flexShrink:0,borderRadius:6,display:"block"}}>
+    <rect width="100" height="100" rx="10" fill="#D4000F"/>
+    <text x="50" y="45" textAnchor="middle" fill="white" fontSize="22" fontWeight="900" fontFamily="Arial,sans-serif">T</text>
+    <text x="50" y="68" textAnchor="middle" fill="white" fontSize="14" fontWeight="700" fontFamily="Arial,sans-serif">market</text>
+  </svg>
+);
+const MetroLogo = ({size=32}) => (
+  <svg width={size} height={size} viewBox="0 0 100 100" fill="none" style={{flexShrink:0,borderRadius:6,display:"block"}}>
+    <rect width="100" height="100" rx="10" fill="#003F8A"/>
+    <text x="50" y="56" textAnchor="middle" fill="#FFD700" fontSize="20" fontWeight="900" fontFamily="Arial Black,Arial,sans-serif">METRO</text>
+  </svg>
+);
+const CbaLogo = ({size=32}) => (
+  <svg width={size} height={size} viewBox="0 0 100 100" fill="none" style={{flexShrink:0,borderRadius:6,display:"block"}}>
+    <rect width="100" height="100" rx="10" fill="#C8102E"/>
+    <text x="50" y="62" textAnchor="middle" fill="white" fontSize="30" fontWeight="900" fontFamily="Arial Black,Arial,sans-serif">CBA</text>
+  </svg>
+);
+const PennyLogo = ({size=32}) => (
+  <svg width={size} height={size} viewBox="0 0 100 100" fill="none" style={{flexShrink:0,borderRadius:6,display:"block"}}>
+    <rect width="100" height="100" rx="10" fill="#CC0000"/>
+    <text x="50" y="44" textAnchor="middle" fill="white" fontSize="18" fontWeight="900" fontFamily="Arial,sans-serif">PENNY</text>
+    <text x="50" y="66" textAnchor="middle" fill="#FFD700" fontSize="14" fontWeight="700" fontFamily="Arial,sans-serif">MARKET</text>
+  </svg>
+);
+const GenericLogo = ({size=32,color="#444",letter="S"}) => (
+  <svg width={size} height={size} viewBox="0 0 100 100" fill="none" style={{flexShrink:0,borderRadius:6,display:"block"}}>
+    <rect width="100" height="100" rx="10" fill={color}/>
+    <text x="50" y="68" textAnchor="middle" fill="white" fontSize="46" fontWeight="900" fontFamily="Arial,sans-serif">{letter}</text>
+  </svg>
+);
+
+const LOGOS = {
+  kaufland: KauflandLogo,
+  lidl: LidlLogo,
+  billa: BillaLogo,
+  fantastico: FantasticoLogo,
+  tmarket: TMarketLogo,
+  metro: MetroLogo,
+  cba: CbaLogo,
+  penny: PennyLogo,
+};
+function ChainLogo({chainId,size=32}){
+  const L=LOGOS[chainId];
+  const chain=ALL_CHAINS.find(c=>c.id===chainId);
+  if(L) return <L size={size}/>;
+  return <GenericLogo size={size} color={chain?.color||"#444"} letter={(chain?.name||"?")[0]}/>;
+}
+
+// ─── PRODUCT DATA ────────────────────────────────────────────
+const LIVE_CHAINS = ALL_CHAINS.filter(c=>c.status==="live");
+const STORE_IDS   = LIVE_CHAINS.map(c=>c.id);
+
+// Price history (last 8 weeks, most recent last) — for sparklines
+const HIST = {
+  "milk-oly-37": [1.89,1.89,1.84,1.84,1.79,1.84,1.84,1.84],
+  "milk-dan-32": [1.52,1.49,1.49,1.44,1.49,1.49,1.44,1.49],
+  "but-pre":     [1.89,1.89,1.84,1.84,1.79,1.84,1.89,1.84],
+  "ch-pre":      [2.44,2.34,2.34,2.29,2.34,2.34,2.19,2.29],
+  "eggs-L":      [2.04,2.04,1.99,1.94,1.94,1.84,1.94,1.94],
+  "coffee":      [3.99,3.99,3.92,3.82,3.82,3.67,3.82,3.82],
+  "oil":         [1.94,1.84,1.84,1.79,1.84,1.84,1.68,1.79],
+  "detergent":   [6.79,6.79,6.59,6.49,6.49,5.99,6.49,6.49],
+  "tom":         [1.83,1.68,1.63,1.53,1.53,1.43,1.53,1.53],
+  "br-white":    [0.66,0.66,0.61,0.56,0.61,0.56,0.56,0.61],
+};
+
+// Smart substitutes
+const SUBS = {
+  "but-lurpak":  ["but-pre","but-anchor"],
+  "milk-oly-37": ["milk-dan-32","milk-raj-37"],
+  "ch-pre":      ["ch-oly","ch-rodo"],
+  "coffee":      ["coffee-lav","coffee-elite"],
+  "yog-dan":     ["yog-oly","yog-pre"],
+};
+
+const IMG = {
+  milk:"https://images.openfoodfacts.org/images/products/509/197/608/6256/front_en.3.400.jpg",
+  butter:"https://images.openfoodfacts.org/images/products/502/000/001/1203/front_en.26.400.jpg",
+  cheese:"https://images.openfoodfacts.org/images/products/303/371/013/3738/front_fr.27.400.jpg",
+  yogurt:"https://images.openfoodfacts.org/images/products/871/125/900/1257/front_en.13.400.jpg",
+  eggs:"https://images.openfoodfacts.org/images/products/500/011/258/4806/front_en.15.400.jpg",
+  bread:"https://images.openfoodfacts.org/images/products/302/995/914/9802/front_en.11.400.jpg",
+  produce:"https://images.openfoodfacts.org/images/products/359/671/006/7209/front_en.5.400.jpg",
+  pantry:"https://images.openfoodfacts.org/images/products/544/900/021/4911/front_en.19.400.jpg",
+  meat:"https://images.openfoodfacts.org/images/products/500/011/258/4806/front_en.15.400.jpg",
+  juice:"https://images.openfoodfacts.org/images/products/359/671/006/7209/front_en.5.400.jpg",
+  cleaning:"https://images.openfoodfacts.org/images/products/544/900/021/4911/front_en.19.400.jpg",
+  snack:"https://images.openfoodfacts.org/images/products/544/900/021/4911/front_en.19.400.jpg",
+  frozen:"https://images.openfoodfacts.org/images/products/302/995/914/9802/front_en.11.400.jpg",
+};
+const P=(id,cat,en,bg,brand,sz,img,prices,sale={},fatPct=null)=>({id,category:cat,nameEN:en,nameBG:bg,brand,size:sz,img,prices,sale,fatPct});
+
+let PRODUCTS = []; // Will be populated dynamically from AWS S3
+
+const CAT_ICONS={Milk:"🥛",Butter:"🧈","White Cheese":"🧀",Yogurt:"🥣",Eggs:"🥚",Bread:"🍞",Meat:"🥩",Produce:"🥦",Pantry:"🫙",Drinks:"🥤",Household:"🧹",Snacks:"🍿",Frozen:"🧊"};
+const CAT_META={
+  Milk:{hasFat:true,hasBrand:true,sizes:["1L","1.5L","2L"]},
+  Butter:{hasFat:false,hasBrand:true,sizes:["125g","200g","250g"]},
+  "White Cheese":{hasFat:false,hasBrand:true,sizes:["250g","400g","500g","1kg"]},
+  Yogurt:{hasFat:true,hasBrand:true,sizes:["200g","400g","800g"]},
+  Eggs:{haFat:false,hasBrand:false,sizes:["6pk","10pk","15pk","30pk"]},
+  Bread:{haFat:false,hasBrand:false,sizes:["400g","500g","700g","1kg"]},
+  Meat:{haFat:false,hasBrand:false,sizes:[]},
+  Produce:{haFat:false,hasBrand:false,sizes:[]},
+  Pantry:{haFat:false,hasBrand:false,sizes:[]},
+  Drinks:{haFat:false,hasBrand:true,sizes:[]},
+  Household:{haFat:false,hasBrand:true,sizes:[]},
+  Snacks:{haFat:false,hasBrand:true,sizes:[]},
+  Frozen:{haFat:false,hasBrand:false,sizes:[]},
+};
+const ONBOARD_CATS=["Milk","Butter","White Cheese","Yogurt","Eggs","Bread"];
+const DEFAULT_LIST=["milk-oly-37","but-pre","eggs-L","br-white","tom","oni","ch-pre","oil","yog-dan","rice","coffee","tp","ban","meat-chk","water"];
+
+// ─── WEEKLY DEALS (Thursday brochure-style) ───────────────────────────────────
+// Each deal: { id, store, prodId, label, labelBG, oldPrice, newPrice, pct, unit, endDay }
+// endDay: 0=Mon…6=Sun, deals rotate weekly (valid Thu–Wed cycle)
+const WEEKLY_DEALS = [
+  { id:"d1", store:"lidl",       prodId:"milk-oly-37",  label:"Olympus Milk 1L",       labelBG:"Олимпус Мляко 1Л",       oldPrice:1.79, newPrice:1.39, pct:22, endDay:3 },
+  { id:"d2", store:"kaufland",   prodId:"meat-chk",     label:"Chicken Fillet 1kg",    labelBG:"Пилешко Филе 1кг",       oldPrice:6.99, newPrice:4.99, pct:29, endDay:3 },
+  { id:"d3", store:"billa",      prodId:"choc-milka",   label:"Milka 100g",            labelBG:"Милка 100г",             oldPrice:1.39, newPrice:0.89, pct:36, endDay:4 },
+  { id:"d4", store:"penny",      prodId:"fr-icecream",  label:"Magnum 3pk",            labelBG:"Магнум 3бр",             oldPrice:4.29, newPrice:2.99, pct:30, endDay:4 },
+  { id:"d5", store:"fantastico", prodId:"nuts",         label:"Mixed Nuts 150g",       labelBG:"Смесени Ядки 150г",      oldPrice:2.59, newPrice:1.79, pct:31, endDay:5 },
+  { id:"d6", store:"metro",      prodId:"fr-pizza",     label:"Dr. Oetker Pizza",      labelBG:"Д-р Йоткер Пица",       oldPrice:3.49, newPrice:2.49, pct:29, endDay:5 },
+  { id:"d7", store:"tmarket",    prodId:"oil",          label:"Sunflower Oil 1L",      labelBG:"Слънчогледово Масло 1Л", oldPrice:2.99, newPrice:1.99, pct:33, endDay:3 },
+  { id:"d8", store:"cba",        prodId:"chips-lays",   label:"Lays 140g",             labelBG:"Лейс 140г",             oldPrice:1.57, newPrice:0.99, pct:37, endDay:4 },
+  { id:"d9", store:"lidl",       prodId:"yog-dan",      label:"Danone Yogurt 400g",    labelBG:"Данон Кисело Мляко 400г",oldPrice:1.39, newPrice:0.99, pct:29, endDay:3 },
+  { id:"d10",store:"kaufland",   prodId:"eggs-L",       label:"Free Range Eggs 10pk",  labelBG:"Яйца от Свободно Отглеждане 10бр",oldPrice:3.29, newPrice:2.29, pct:30, endDay:3 },
+];
+
+function getDaysLeft(endDay){
+  const today = new Date().getDay(); // 0=Sun…6=Sat
+  let diff = endDay - today;
+  if(diff <= 0) diff += 7;
+  return diff;
+}
+
+
+function getBestStore(p,activeStores){
+  const ids=activeStores||STORE_IDS;
+  let best=null,bv=Infinity;
+  ids.forEach(id=>{if(p.prices[id]!=null&&p.prices[id]<bv){bv=p.prices[id];best=id;}});
+  return best;
+}
+function getBestPrice(p,activeStores){
+  const ids=(activeStores||STORE_IDS).filter(id=>p.prices[id]!=null);
+  return ids.length?Math.min(...ids.map(id=>p.prices[id])):null;
+}
+function getWorstPrice(p,activeStores){
+  const ids=(activeStores||STORE_IDS).filter(id=>p.prices[id]!=null);
+  return ids.length?Math.max(...ids.map(id=>p.prices[id])):null;
+}
+function fmt(v){return v!=null?`€${v.toFixed(2)}`:"—";}
+function perUnit(p,activeStores){
+  const bp=getBestPrice(p,activeStores); if(!bp||!p.size) return null;
+  if(p.size.includes("kg")&&!p.size.includes("×")){const kg=parseFloat(p.size);return kg&&kg!==1?fmt(bp/kg)+"/kg":null;}
+  if(p.size.includes("L")&&!p.size.includes("×")){const l=parseFloat(p.size);return l&&l!==1?fmt(bp/l)+"/L":null;}
+  return null;
+}
+
+// ─── CSS ──────────────────────────────────────────────────────────────────────
+const CSS=`
+  .fade{opacity:0;transform:translateY(14px);transition:all 0.4s ease}.fade.in{opacity:1;transform:none}
+  .nav-tab{background:none;border:none;cursor:pointer;padding:11px 14px;font-family:'Source Sans 3',sans-serif;font-weight:700;font-size:11px;letter-spacing:1.2px;text-transform:uppercase;color:#2A3A55;transition:color 0.2s;border-bottom:2px solid transparent;white-space:nowrap}
+  .nav-tab.active{color:#E8C547;border-bottom:2px solid #E8C547}
+  .nav-tab:hover{color:#B0A890}
+  .cat-pill{background:#0D1520;border:1px solid #172030;border-radius:20px;color:#3A4A65;padding:6px 12px;font-size:11px;font-family:'Source Sans 3',sans-serif;font-weight:700;cursor:pointer;transition:all 0.15s;white-space:nowrap}
+  .cat-pill.active{background:#E8C547;border-color:#E8C547;color:#09111F}
+  .cat-pill:hover:not(.active){border-color:#2A3A55;color:#B0A890}
+  .icard{background:#0D1520;border:1px solid #172030;border-radius:12px;overflow:hidden;transition:border-color 0.2s,box-shadow 0.2s}
+  .icard:hover{border-color:#2A3A55;box-shadow:0 4px 18px rgba(0,0,0,0.4)}
+  .icard.exp{border-color:#E8C547!important}
+  .icard.inlist{border-left:3px solid #2A8A2A}
+  .check-box{width:22px;height:22px;border-radius:5px;border:2px solid #1F2D45;display:flex;align-items:center;justify-content:center;cursor:pointer;transition:all 0.15s;flex-shrink:0;user-select:none}
+  .check-box.chk{background:#E8C547;border-color:#E8C547}
+  .qty-btn{background:#172030;border:none;color:#B0A890;width:27px;height:27px;border-radius:5px;cursor:pointer;font-size:16px;line-height:1;transition:background 0.15s;flex-shrink:0}
+  .qty-btn:hover{background:#253550}
+  .ctrl-btn{background:#0D1520;border:1px solid #172030;border-radius:6px;color:#3A4A65;padding:6px 12px;font-size:11px;font-family:'Source Sans 3',sans-serif;font-weight:700;cursor:pointer;transition:all 0.15s;letter-spacing:.4px}
+  .ctrl-btn:hover{border-color:#2A3A55;color:#B0A890}
+  .ctrl-btn.active{background:#E8C547;border-color:#E8C547;color:#09111F}
+  .inp{background:#0D1520;border:1px solid #172030;border-radius:8px;color:#EDE5D0;padding:11px 16px;font-family:'Source Sans 3',sans-serif;font-size:14px;outline:none;transition:border 0.2s;width:100%}
+  .inp:focus{border-color:#E8C547}
+  .lang-toggle{display:flex;background:#0D1520;border:1px solid #172030;border-radius:6px;overflow:hidden}
+  .lang-btn{background:none;border:none;cursor:pointer;padding:6px 11px;font-family:'Source Sans 3',sans-serif;font-weight:800;font-size:11px;letter-spacing:1px;color:#253040;transition:all 0.15s}
+  .lang-btn.active{background:#E8C547;color:#09111F}
+  .lang-btn:hover:not(.active){color:#B0A890}
+  .chip-btn{border-radius:20px;padding:6px 14px;font-family:'Source Sans 3',sans-serif;font-weight:700;font-size:12px;cursor:pointer;transition:all 0.15s;border:1.5px solid}
+  @keyframes slideIn{from{opacity:0;transform:translateX(18px)}to{opacity:1;transform:none}}
+  .slidein{animation:slideIn 0.26s ease}
+  .sale-tag{background:#E8C547;color:#09111F;font-size:8px;font-weight:900;padding:2px 5px;border-radius:2px;font-family:'Source Sans 3',sans-serif;letter-spacing:.5px}
+  .watch-btn{background:none;border:none;cursor:pointer;padding:4px;transition:transform 0.15s;font-size:15px;line-height:1}
+  .watch-btn:hover{transform:scale(1.25)}
+  .loc-pulse{width:14px;height:14px;border-radius:50%;background:#6DBF6D;animation:pulse 1.5s infinite}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(109,191,109,0.5)}50%{box-shadow:0 0 0 8px rgba(109,191,109,0)}}
+
+// Map cyrillic store names from the CSV to our internal IDs
+const STORE_MAP = {
+  "лидл": "lidl",
+  "фантастико": "fantastico",
+  "билла": "billa",
+  "метро": "metro",
+  "t market": "tmarket",
+  "kaufland": "kaufland",
+  "cba": "cba",
+  "penny": "penny"
+};
+
+const CACHE_MINS = 30;
+
+// ─── MAIN APP COMPONENT ───────────────────────────────────────────────────────
+function App(){
+  const [lang,setLang]           = useState("EN");
+  const [view,setView]           = useState("onboard"); // onboard|discovery|list|storeview
+  const [appLoading, setAppLoading] = useState(true);
+
+  const [onboardCat,setOnboardCat]=useState(0);
+  const [prefs,setPrefs]         = useState({});
+  const [userLoc,setUserLoc]     = useState(null);
+  .watch-btn:hover{transform:scale(1.25)}
+  .loc-pulse{width:14px;height:14px;border-radius:50%;background:#6DBF6D;animation:pulse 1.5s infinite}
+  @keyframes pulse{0%,100%{box-shadow:0 0 0 0 rgba(109,191,109,0.5)}50%{box-shadow:0 0 0 8px rgba(109,191,109,0)}}
+  .chain-card{border:2px solid #172030;border-radius:12px;cursor:pointer;transition:all 0.18s;background:#0D1520}
+  .chain-card:hover{border-color:#2A3A55;background:#101E2E}
+  .chain-card.selected{border-color:var(--cc);background:color-mix(in srgb, var(--cc) 12%, #0D1520)}
+  .chain-card.disabled{opacity:.45;cursor:not-allowed}
+  @media(max-width:500px){.nav-tab{padding:10px 9px;font-size:10px;letter-spacing:.7px}}
+  .deal-card{background:#0D1520;border:1px solid #2A1800;border-radius:10px;padding:10px 12px;cursor:pointer;transition:all 0.18s;flex-shrink:0;width:148px}
+  .deal-card:hover{border-color:#E8C547;box-shadow:0 4px 16px rgba(232,197,71,0.1)}
+  .deal-card.in-list{border-color:#163016}
+  .share-btn{background:linear-gradient(135deg,#25D366,#128C7E);border:none;border-radius:8px;color:#fff;font-family:'Source Sans 3',sans-serif;font-weight:800;font-size:12px;padding:10px 16px;cursor:pointer;display:flex;align-items:center;gap:7px;transition:all 0.18s}
+  .share-btn:hover{opacity:0.88;transform:translateY(-1px)}
+  .share-btn.copy{background:linear-gradient(135deg,#2A3A55,#1A2840)}
+  @keyframes fadeToast{0%{opacity:1;transform:translateY(0)}80%{opacity:1}100%{opacity:0;transform:translateY(-8px)}}
+  .toast{position:fixed;bottom:80px;left:50%;transform:translateX(-50%);background:#E8C547;color:#09111F;padding:9px 20px;border-radius:20px;font-family:'Source Sans 3',sans-serif;font-weight:800;font-size:12px;z-index:999;animation:fadeToast 2.4s forwards;pointer-events:none}
+
+`;
+
+// ─── CHIPS ────────────────────────────────────────────────────────────────────
+function Chip({label,selected,onToggle,color="#E8C547"}){
+  return <button className="chip-btn" onClick={onToggle} style={{background:selected?color:"#101828",borderColor:selected?color:"#1F2D45",color:selected?"#09111F":"#5A6A85"}}>{label}</button>;
+}
+function StoreBadge({chainId,size=18,showName=false}){
+  const chain=ALL_CHAINS.find(c=>c.id===chainId)||{color:"#444",name:chainId};
+  return (
+    <span style={{display:"inline-flex",alignItems:"center",gap:5,background:chain.color+"1A",border:`1px solid ${chain.color}33`,borderRadius:20,padding:showName?"3px 8px 3px 3px":"3px",flexShrink:0}}>
+      <ChainLogo chainId={chainId} size={size}/>
+      {showName&&<span style={{fontSize:11,fontFamily:"'Source Sans 3',sans-serif",fontWeight:700,color:chain.color}}>{chain.name}</span>}
+    </span>
+  );
+}
+
+// ─── LOCATION + STORE SELECTOR ────────────────────────────────────────────────
+function NearbyStores({userLoc,activeStores,setActiveStores,onDone,lang="BG"}){
+  const [locState,setLocState]   = useState(userLoc?"found":"idle"); // idle|loading|found|denied
+  const [coords,setCoords]       = useState(userLoc);
+  const [nearbyChains,setNearby] = useState([]);
+  const [cityName,setCityName]   = useState(userLoc?.city||"");
+  const RADIUS_KM = 15;
+
+  const findNearby = (lat,lon) => {
+    const seen = new Set();
+    const results = [];
+    STORE_LOCATIONS.forEach(loc=>{
+      const d = distKm(lat,lon,loc.lat,loc.lon);
+      if(d<=RADIUS_KM && !seen.has(loc.chain)){
+        seen.add(loc.chain);
+        results.push({chainId:loc.chain, dist:d, city:loc.city, address:loc.address});
+      }
+    });
+    results.sort((a,b)=>a.dist-b.dist);
+    setNearby(results);
+    if(results.length>0) setCityName(results[0].city);
+    // Auto-select all found live chains
+    const liveFound=results.filter(r=>ALL_CHAINS.find(c=>c.id===r.chainId)?.status==="live").map(r=>r.chainId);
+    if(liveFound.length>0) setActiveStores(new Set(liveFound));
+  };
+
+  const requestLocation = () => {
+    setLocState("loading");
+    navigator.geolocation.getCurrentPosition(
+      pos=>{ const {latitude:lat,longitude:lon}=pos.coords; setCoords({lat,lon}); setLocState("found"); findNearby(lat,lon); },
+      ()=>setLocState("denied"),
+      {timeout:8000}
+    );
+  };
+
+  useEffect(()=>{ if(userLoc?.lat){ findNearby(userLoc.lat,userLoc.lon); setLocState("found"); } },[]);
+
+  const liveNearby  = nearbyChains.filter(r=>ALL_CHAINS.find(c=>c.id===r.chainId)?.status==="live");
+  const soonNearby  = nearbyChains.filter(r=>ALL_CHAINS.find(c=>c.id===r.chainId)?.status==="soon");
+  const allLive     = ALL_CHAINS.filter(c=>c.status==="live");
+
+  return (
+    <div>
+      <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:22}}>
+        <div style={{fontSize:36}}>📍</div>
+        <div>
+          <div style={{fontFamily:"'Playfair Display',serif",fontSize:21,fontWeight:800,color:"#EDE5D0"}}>{lang==="BG"?"Моите Магазини":"Your Stores"}</div>
+          <div style={{fontSize:12,color:"#3A4A65",fontFamily:"'Source Sans 3',sans-serif",marginTop:2}}>{lang==="BG"?"Избери магазините близо до теб":"Select the stores near you to compare"}</div>
+        </div>
+      </div>
+
+      {/* Location finder */}
+      <div style={{background:"#080F1A",border:"1px solid #172030",borderRadius:12,padding:16,marginBottom:20}}>
+        {locState==="idle"&&<div style={{textAlign:"center"}}>
+          <div style={{fontSize:13,color:"#4A5A75",fontFamily:"'Source Sans 3',sans-serif",marginBottom:14}}>{lang==="BG"?"Сподели местоположението си, за да видиш наличните магазини":"Share your location to see which stores are nearby"}</div>
+          <button onClick={requestLocation} style={{background:"#E8C547",border:"none",borderRadius:8,padding:"12px 24px",fontFamily:"'Source Sans 3',sans-serif",fontWeight:900,fontSize:13,color:"#09111F",cursor:"pointer"}}>
+            {lang==="BG"?"📍 Намери Магазини Близо до Мен":"📍 Find Stores Near Me"}
+          </button>
+        </div>}
+
+        {locState==="loading"&&<div style={{textAlign:"center",padding:"10px 0"}}>
+          <div style={{fontFamily:"'Source Sans 3',sans-serif",fontSize:13,color:"#4ABFD0"}}>
+            <span style={{display:"inline-block",animation:"spin 1s linear infinite",marginRight:8}}>⏳</span>
+            {lang==="BG"?"Получаване на местоположението…":"Getting your location…"}
+          </div>
+        </div>}
+
+        {locState==="found"&&nearbyChains.length>0&&<div>
+          <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:4}}>
+            <div className="loc-pulse"/>
+            <span style={{fontFamily:"'Source Sans 3',sans-serif",fontSize:12,fontWeight:700,color:"#6DBF6D"}}>
+              {cityName?(lang==="BG"?`Магазини близо до ${cityName}`:`Stores near ${cityName}`):(lang==="BG"?"Местоположението е намерено":"Location found")}
+            </span>
+          </div>
+          <div style={{fontSize:11,color:"#2A5020",fontFamily:"'Source Sans 3',sans-serif"}}>
+            {lang==="BG"?`Намерени ${liveNearby.length} верига${liveNearby.length!==1?"и":""} в ${RADIUS_KM}км · ${soonNearby.length} предстоят`:`Found ${liveNearby.length} active chain${liveNearby.length!==1?"s":""} within ${RADIUS_KM}km · ${soonNearby.length} more coming soon`}
+          </div>
+        </div>}
+
+        {locState==="found"&&nearbyChains.length===0&&<div style={{textAlign:"center",fontSize:12,color:"#3A4A65",fontFamily:"'Source Sans 3',sans-serif"}}>
+          {lang==="BG"?"Няма магазини наблизо — избери ръчно по-долу":"No stores found nearby — select stores manually below."}
+        </div>}
+
+        {locState==="denied"&&<div style={{textAlign:"center"}}>
+          <div style={{fontSize:12,color:"#E05050",fontFamily:"'Source Sans 3',sans-serif",marginBottom:10}}>{lang==="BG"?"Достъпът до местоположение е отказан — избери ръчно":"Location access denied — select your stores manually below"}</div>
+          <button onClick={requestLocation} className="ctrl-btn">{lang==="BG"?"Опитай отново":"Try Again"}</button>
+        </div>}
+      </div>
+
+      {/* LIVE chains — selectable */}
+      <div style={{fontSize:10,color:"#2A3A55",fontFamily:"'Source Sans 3',sans-serif",letterSpacing:"2px",textTransform:"uppercase",marginBottom:10}}>
+        {lang==="BG"?"🟢 Налични — Избери магазини за сравнение":"🟢 Available Now — Select stores to compare"}
+      </div>
+      <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:9,marginBottom:20}}>
+        {allLive.map(chain=>{
+          const nearby=nearbyChains.find(r=>r.chainId===chain.id);
+          const isSel=activeStores.has(chain.id);
+          return (
+            <button key={chain.id} className={"chain-card"+(isSel?" selected":"")}
+              style={{"--cc":chain.color,borderColor:isSel?chain.color:"#172030",background:isSel?chain.color+"20":"#0D1520",padding:"12px 10px",textAlign:"left",width:"100%",border:`2px solid ${isSel?chain.color:"#172030"}`,borderRadius:12,cursor:"pointer",transition:"all 0.18s"}}
+              onClick={()=>{
+                const nx=new Set(activeStores);
+                if(isSel&&nx.size>1) nx.delete(chain.id);
+                else nx.add(chain.id);
+                setActiveStores(nx);
+              }}>
+              <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:6}}>
+                <ChainLogo chainId={chain.id} size={28}/>
+                <div style={{fontFamily:"'Playfair Display',serif",fontWeight:800,fontSize:14,color:isSel?chain.color:"#EDE5D0"}}>{chain.name}</div>
+                {isSel&&<span style={{marginLeft:"auto",fontSize:14,color:chain.color}}>✓</span>}
+              </div>
+              {nearby?<div style={{display:"flex",alignItems:"center",gap:5}}>
+                <div className="loc-pulse" style={{width:8,height:8,background:"#6DBF6D"}}/>
+                <span style={{fontSize:10,color:"#6DBF6D",fontFamily:"'Source Sans 3',sans-serif",fontWeight:700}}>{nearby.dist.toFixed(1)}км · {nearby.city}</span>
+              </div>:<div style={{fontSize:10,color:"#2A3A55",fontFamily:"'Source Sans 3',sans-serif"}}>
+                {lang==="BG"?`${chain.stores} магазина в България`:`${chain.stores} stores in Bulgaria`}
+              </div>}
+              <div style={{fontSize:10,color:"#2A3A55",fontFamily:"'Source Sans 3',sans-serif",marginTop:3}}>{chain.desc.split("·").slice(1).join("·").trim()}</div>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* COMING SOON chains */}
+      <div style={{fontSize:10,color:"#2A3A55",fontFamily:"'Source Sans 3',sans-serif",letterSpacing:"2px",textTransform:"uppercase",marginBottom:10}}>
+        {lang==="BG"?"🔜 Очаквайте — Още 4 вериги предстоят":"🔜 Coming Soon — 4 more chains in progress"}
+      </div>
+      <div style={{display:"flex",flexDirection:"column",gap:6,marginBottom:24,opacity:0.6}}>
+        {ALL_CHAINS.filter(c=>c.status==="soon").map(chain=>{
+          const nearby=nearbyChains.find(r=>r.chainId===chain.id);
+          return (
+            <div key={chain.id} style={{display:"flex",alignItems:"center",gap:10,background:"#080E1A",border:"1px solid #131E30",borderRadius:9,padding:"9px 12px"}}>
+              <ChainLogo chainId={chain.id} size={24}/>
+              <div style={{flex:1}}>
+                <span style={{fontFamily:"'Source Sans 3',sans-serif",fontWeight:700,fontSize:12,color:"#4A5A75"}}>{chain.name}</span>
+                {nearby&&<span style={{fontSize:10,color:"#2A5060",fontFamily:"'Source Sans 3',sans-serif",marginLeft:8}}>{nearby.dist.toFixed(1)}km</span>}
+                <div style={{fontSize:10,color:"#1F2D45",fontFamily:"'Source Sans 3',sans-serif",marginTop:1}}>{chain.stores} stores · {chain.desc.split("·").slice(1).join("·").trim()}</div>
+              </div>
+              <span style={{fontSize:10,background:"#1A2A3A",color:"#3A5A70",padding:"3px 8px",borderRadius:20,fontFamily:"'Source Sans 3',sans-serif",fontWeight:700,flexShrink:0}}>SOON</span>
+            </div>
+          );
+        })}
+      </div>
+
+      <div style={{display:"flex",gap:10,alignItems:"center"}}>
+        <div style={{fontSize:12,color:"#2A3A55",fontFamily:"'Source Sans 3',sans-serif"}}>
+          {lang==="BG"?`${activeStores.size} магазин${activeStores.size!==1?"а":"а"} избрани`:`${activeStores.size} store${activeStores.size!==1?"s":""} selected`}
+        </div>
+        <button onClick={onDone} style={{flex:1,background:"#E8C547",border:"none",borderRadius:8,padding:"14px 20px",fontFamily:"'Source Sans 3',sans-serif",fontWeight:900,fontSize:14,color:"#09111F",cursor:"pointer"}}>
+          {lang==="BG"?"✓ Потвърди и Продължи →":"✓ Confirm & Continue →"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ─── SPARKLINE ────────────────────────────────────────────────────────────────
+function Sparkline({data, width=80, height=24}){
+  if(!data||data.length<2) return null;
+  const mn=Math.min(...data), mx=Math.max(...data);
+  const range=mx-mn||0.01;
+  const pts=data.map((v,i)=>{
+    const x=(i/(data.length-1))*width;
+    const y=height-((v-mn)/range)*(height-4)-2;
+    return x.toFixed(1)+","+y.toFixed(1);
+  }).join(" ");
+  const trend=data[data.length-1]-data[0];
+  const trendColor=trend>0.01?"#E05050":trend<-0.01?"#6DBF6D":"#4A5A75";
+  const lastParts=pts.split(" ").pop().split(",");
+  return (
+    <svg width={width} height={height} style={{display:"block",flexShrink:0}}>
+      <polyline points={pts} fill="none" stroke={trendColor} strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round"/>
+      <circle cx={parseFloat(lastParts[0])} cy={parseFloat(lastParts[1])} r="2.5" fill={trendColor}/>
+    </svg>
+  );
+}
+
+function spestiScore(savings, worstTotal, listCount){
+  if(!worstTotal||!listCount) return null;
+  const pctSaved=(savings/worstTotal)*100;
+  const efficiency=Math.min(pctSaved/12,1)*70;
+  const coverage=Math.min(listCount/10,1)*30;
+  return Math.round(efficiency+coverage);
+}
+
+function PriceBar({prod,activeStores,lang}){
+  const storeArr=ALL_CHAINS.filter(c=>activeStores.has(c.id)&&prod.prices[c.id]!=null);
+  if(!storeArr.length) return null;
+  const bestId=getBestStore(prod,[...activeStores]);
+  const bestP=getBestPrice(prod,[...activeStores]);
+  const worstP=getWorstPrice(prod,[...activeStores]);
+  const worstId=storeArr.reduce((a,b)=>prod.prices[b.id]>prod.prices[a.id]?b:a).id;
+  return (
+    <div>
+      {storeArr.map(store=>{
+        const price=prod.prices[store.id],isBest=store.id===bestId,isWorst=store.id===worstId;
+        const barW=((price-bestP)/Math.max(worstP-bestP,0.01))*55+10;
+        return (
+          <div key={store.id} style={{display:"flex",alignItems:"center",gap:8,marginBottom:10}}>
+            <div style={{width:88,display:"flex",alignItems:"center",gap:6}}>
+              <ChainLogo chainId={store.id} size={17}/>
+              <span style={{fontFamily:"'Source Sans 3',sans-serif",fontSize:11,fontWeight:700,color:store.color}}>{store.name}</span>
+            </div>
+            <div style={{flex:1,background:"#0D1825",borderRadius:3,height:5,overflow:"hidden"}}>
+              <div style={{width:barW+"%",height:"100%",background:isBest?"#6DBF6D":isWorst?"#E05050":"#2A3A60",borderRadius:3}}/>
+            </div>
+            <div style={{minWidth:52,textAlign:"right",fontFamily:"'Playfair Display',serif",fontWeight:800,fontSize:14,color:isBest?"#6DBF6D":isWorst?"#E05050":"#A8A090"}}>{fmt(price)}</div>
+            <div style={{minWidth:70,fontSize:9,fontFamily:"'Source Sans 3',sans-serif"}}>
+              {isBest&&<span style={{color:"#6DBF6D",fontWeight:900}}>{lang==="BG"?"✓ НАЙ-ЕВТИНО":"✓ CHEAPEST"}</span>}
+              {isWorst&&!isBest&&<span style={{color:"#E05050"}}>{lang==="BG"?"НАЙ-СКЪПО":"PRICIEST"}</span>}
+              {prod.sale&&prod.sale[store.id]&&<span className="sale-tag" style={{marginLeft:2}}>SALE</span>}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+// ─── ONBOARDING STEP ──────────────────────────────────────────────────────────
+function OnboardStep({cat,prefs,setPrefs,stepNum,isLast,onNext,onSkip,lang="BG"}){
+  const meta=CAT_META[cat]||{hasFat:false,hasBrand:false,sizes:[]};
+  const catProds=PRODUCTS.filter(p=>p.category===cat);
+  const brands=[...new Set(catProds.map(p=>p.brand))];
+  const fats=meta.hasFat?[...new Set(catProds.map(p=>p.fatPct).filter(Boolean))].sort((a,b)=>b-a):[];
+  const p=prefs[cat]||{anyBrand:true,brands:[],excludedBrands:[],anyFat:true,fats:[],sizes:[]};
+  const set=(k,v)=>setPrefs(prev=>({...prev,[cat]:{...p,[k]:v}}));
+  return (
+    <div>
+      <div style={{display:"flex",alignItems:"center",gap:14,marginBottom:22}}>
+        <div style={{fontSize:36}}>{CAT_ICONS[cat]}</div>
+        <div>
+          <div style={{fontFamily:"'Playfair Display',serif",fontSize:21,fontWeight:800,color:"#EDE5D0"}}>{cat}</div>
+          <div style={{fontSize:12,color:"#3A4A65",fontFamily:"'Source Sans 3',sans-serif",marginTop:2}}>{lang==="BG"?"Персонализирай какво проследяваме":"Customize what we track for you"}</div>
+        </div>
+      </div>
+      <div style={{marginBottom:18}}>
+        <div style={{fontSize:10,color:"#2A3A55",letterSpacing:"2px",textTransform:"uppercase",fontFamily:"'Source Sans 3',sans-serif",marginBottom:8}}>{lang==="BG"?"Предпочитание за марка":"Brand preference"}</div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:8}}>
+          <Chip label={lang==="BG"?"Всяка марка — най-добра цена":"Any brand — best price"} selected={p.anyBrand} onToggle={()=>set("anyBrand",true)} color="#6DBF6D"/>
+          <Chip label={lang==="BG"?"Само конкретни марки":"Specific brands only"} selected={!p.anyBrand} onToggle={()=>set("anyBrand",false)}/>
+        </div>
+        {!p.anyBrand&&<>
+          <div style={{fontSize:10,color:"#2A5020",letterSpacing:"1.5px",fontFamily:"'Source Sans 3',sans-serif",marginBottom:6,marginTop:10}}>{lang==="BG"?"✓ МАРКИ, КОИТО ИСКАМ":"✓ BRANDS I WANT"}</div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:12}}>{brands.map(b=><Chip key={b} label={b} selected={p.brands.includes(b)} onToggle={()=>set("brands",p.brands.includes(b)?p.brands.filter(x=>x!==b):[...p.brands,b])}/>)}</div>
+          <div style={{fontSize:10,color:"#5A2A2A",letterSpacing:"1.5px",fontFamily:"'Source Sans 3',sans-serif",marginBottom:6}}>{lang==="BG"?"✕ НИКОГА НЕ МИ ПОКАЗВАЙ":"✕ NEVER SHOW ME"}</div>
+          <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{brands.map(b=><Chip key={b} label={b} selected={p.excludedBrands.includes(b)} color="#E05050" onToggle={()=>set("excludedBrands",p.excludedBrands.includes(b)?p.excludedBrands.filter(x=>x!==b):[...p.excludedBrands,b])}/>)}</div>
+        </>}
+      </div>
+      {meta.hasFat&&fats.length>0&&<div style={{marginBottom:18}}>
+        <div style={{fontSize:10,color:"#2A3A55",letterSpacing:"2px",textTransform:"uppercase",fontFamily:"'Source Sans 3',sans-serif",marginBottom:8}}>{lang==="BG"?"Съдържание на мазнини":"Fat content"}</div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap",marginBottom:8}}>
+          <Chip label={lang==="BG"?"Всеки % мазнини":"Any fat %"} selected={p.anyFat} onToggle={()=>set("anyFat",true)} color="#6DBF6D"/>
+          <Chip label={lang==="BG"?"Конкретен %":"Specific %"} selected={!p.anyFat} onToggle={()=>set("anyFat",false)}/>
+        </div>
+        {!p.anyFat&&<div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{fats.map(f=><Chip key={f} label={f+"%"} selected={p.fats.includes(f)} onToggle={()=>set("fats",p.fats.includes(f)?p.fats.filter(x=>x!==f):[...p.fats,f])}/>)}</div>}
+      </div>}
+      {meta.sizes.length>0&&<div style={{marginBottom:20}}>
+        <div style={{fontSize:10,color:"#2A3A55",letterSpacing:"2px",textTransform:"uppercase",fontFamily:"'Source Sans 3',sans-serif",marginBottom:6}}>{lang==="BG"?"Предпочитани размери":"Preferred sizes"}</div>
+        <div style={{fontSize:11,color:"#2A3A55",fontFamily:"'Source Sans 3',sans-serif",marginBottom:8}}>{lang==="BG"?"💡 Повече размери = по-добро сравнение":"💡 More sizes = better value comparisons"}</div>
+        <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>{meta.sizes.map(s=><Chip key={s} label={s} selected={p.sizes.includes(s)} onToggle={()=>set("sizes",p.sizes.includes(s)?p.sizes.filter(x=>x!==s):[...p.sizes,s])}/>)}</div>
+      </div>}
+      <div style={{display:"flex",gap:8,overflowX:"auto",marginBottom:20,paddingBottom:4}}>
+        {catProds.slice(0,5).map(prod=>(
+          <div key={prod.id} style={{flexShrink:0,width:86,background:"#0D1520",border:"1px solid #1A2540",borderRadius:10,padding:9,textAlign:"center"}}>
+            <img src={prod.img} alt={prod.nameEN} onError={e=>e.target.style.display="none"} style={{width:46,height:46,objectFit:"contain",borderRadius:6,marginBottom:4}}/>
+            <div style={{fontSize:10,color:"#4A5A75",fontFamily:"'Source Sans 3',sans-serif"}}>{prod.brand}</div>
+            <div style={{fontSize:13,color:"#6DBF6D",fontFamily:"'Playfair Display',serif",fontWeight:800,marginTop:2}}>{fmt(getBestPrice(prod,STORE_IDS))}</div>
+          </div>
+        ))}
+      </div>
+      <div style={{display:"flex",gap:10}}>
+        <button onClick={onNext} style={{flex:1,background:"#E8C547",border:"none",borderRadius:8,padding:"14px 20px",fontFamily:"'Source Sans 3',sans-serif",fontWeight:900,fontSize:14,color:"#09111F",cursor:"pointer"}}>
+          {isLast ? (lang==="BG" ? "✓ Готово" : "✓ Finish Setup") : (lang==="BG" ? `Напред: ${ONBOARD_CATS[stepNum+1]} →` : `Next: ${ONBOARD_CATS[stepNum+1]} →`)}
+        </button>
+        <button onClick={onSkip} style={{background:"none",border:"1px solid #1F2D45",borderRadius:8,padding:"14px 16px",fontFamily:"'Source Sans 3',sans-serif",fontWeight:600,fontSize:13,color:"#3A4A65",cursor:"pointer"}}>{lang==="BG"?"Пропусни":"Skip"}</button>
+      </div>
+    </div>
+  );
+}
+
+
+// ─── SELECTED STORE PANEL ────────────────────────────────────────────────────
+function SelectedStorePanel({storeId, listItems, activeArr, getQty, setQtys, lang}){
+  const store = ALL_CHAINS.find(c=>c.id===storeId);
+  if(!store) return null;
+  const storeItems = listItems.filter(p=>getBestStore(p,activeArr)===store.id&&p.prices[store.id]!=null);
+  const storeTotal = storeItems.reduce((s,p)=>s+(p.prices[store.id]||0)*getQty(p.id),0);
+  const altTotal   = storeItems.reduce((s,p)=>s+(getWorstPrice(p,activeArr)||0)*getQty(p.id),0);
+  if(!storeItems.length) return (
+    <div style={{textAlign:"center",padding:"26px 20px",color:"#2A3A55",fontFamily:"'Source Sans 3',sans-serif",background:"#0D1520",borderRadius:12}}>
+      {lang==="BG"?`Нито един твой продукт не е най-евтин в ${store.name} тази седмица.`:`None of your items are cheapest at ${store.name} this week.`}
+    </div>
+  );
+  return (
+    <div className="slidein" style={{background:"#0A0F1A",border:`1px solid ${store.color}33`,borderRadius:12,overflow:"hidden"}}>
+      <div style={{background:`${store.color}1A`,padding:"12px 15px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div style={{display:"flex",alignItems:"center",gap:10}}>
+          <ChainLogo chainId={store.id} size={30}/>
+          <div>
+            <div style={{fontFamily:"'Playfair Display',serif",fontWeight:800,fontSize:15,color:store.color}}>{lang==="BG"?`Купи тези в ${store.name}`:`Buy these at ${store.name}`}</div>
+            <div style={{fontSize:10,color:"#3A4A65",fontFamily:"'Source Sans 3',sans-serif",marginTop:2}}>{lang==="BG"?`${storeItems.length} продукта · спести ${fmt(altTotal-storeTotal)} vs. най-скъпо`:`${storeItems.length} items · save ${fmt(altTotal-storeTotal)} vs. priciest`}</div>
+          </div>
+        </div>
+        <div style={{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:20}}>{fmt(storeTotal)}</div>
+      </div>
+      <div style={{padding:"9px 15px"}}>
+        {storeItems.map(prod=>{
+          const qty=getQty(prod.id);
+          return (
+            <div key={prod.id} style={{display:"flex",alignItems:"center",gap:9,padding:"7px 0",borderBottom:"1px solid #0D1520"}}>
+              <img src={prod.img} alt={prod.nameEN} onError={e=>e.target.style.display="none"} style={{width:36,height:36,objectFit:"contain",borderRadius:5,background:"#131E30",flexShrink:0}}/>
+              <div style={{flex:1}}>
+                <div style={{fontFamily:"'Source Sans 3',sans-serif",fontWeight:700,fontSize:12,color:"#EDE5D0"}}>{lang==="BG"?prod.nameBG:prod.nameEN}</div>
+                <div style={{display:"flex",gap:9,marginTop:2,alignItems:"center"}}>
+                  <span style={{fontSize:10,color:"#2A3A55",textDecoration:"line-through",fontFamily:"'Source Sans 3',sans-serif"}}>{fmt(getWorstPrice(prod,activeArr))}</span>
+                  <span style={{fontSize:13,color:"#6DBF6D",fontFamily:"'Playfair Display',serif",fontWeight:800}}>{fmt(prod.prices[store.id])}</span>
+                  {prod.sale&&prod.sale[store.id]&&<span className="sale-tag">SALE</span>}
+                </div>
+              </div>
+              <div style={{display:"flex",alignItems:"center",gap:4}}>
+                <button className="qty-btn" onClick={()=>setQtys(p=>({...p,[prod.id]:Math.max(1,qty-1)}))}>−</button>
+                <span style={{fontSize:12,fontWeight:800,minWidth:18,textAlign:"center",fontFamily:"'Source Sans 3',sans-serif"}}>{qty}</span>
+                <button className="qty-btn" onClick={()=>setQtys(p=>({...p,[prod.id]:qty+1}))}>+</button>
+              </div>
+              <div style={{fontFamily:"'Playfair Display',serif",fontWeight:800,fontSize:14,color:"#E8C547",minWidth:50,textAlign:"right"}}>{fmt((prod.prices[store.id]||0)*qty)}</div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── WEEKLY DEALS BANNER ─────────────────────────────────────────────────────
+function WeeklyDeals({activeStores, weeklyList, toggleItem, lang}){
+  const activeDeals = WEEKLY_DEALS.filter(d=>activeStores.has(d.store));
+  if(!activeDeals.length) return null;
+  const today = new Date();
+  const isThursday = today.getDay()===4;
+  return (
+    <div style={{marginBottom:22}}>
+      <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:10}}>
+        <div style={{display:"flex",alignItems:"center",gap:8}}>
+          <div style={{fontSize:10,fontFamily:"'Source Sans 3',sans-serif",fontWeight:800,letterSpacing:"2px",textTransform:"uppercase",color:"#4A3000"}}>
+            🔥 {lang==="BG"?"ОФЕРТИ ТАЗИ СЕДМИЦА":"THIS WEEK'S DEALS"}
+          </div>
+          {isThursday&&<div style={{background:"#E8C547",color:"#09111F",fontSize:8,fontWeight:900,padding:"2px 7px",borderRadius:10,fontFamily:"'Source Sans 3',sans-serif",letterSpacing:"1px"}}>
+            {lang==="BG"?"НОВИ ДНЕС":"NEW TODAY"}
+          </div>}
+        </div>
+        <div style={{fontSize:9,color:"#2A3A55",fontFamily:"'Source Sans 3',sans-serif"}}>
+          {lang==="BG"?"Актуализира се всеки четвъртък":"Updates every Thursday"}
+        </div>
+      </div>
+      <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:6}}>
+        {activeDeals.map(deal=>{
+          const daysLeft = getDaysLeft(deal.endDay);
+          const inList = weeklyList.has(deal.prodId);
+          const store = ALL_CHAINS.find(c=>c.id===deal.store);
+          return (
+            <div key={deal.id} className={"deal-card"+(inList?" in-list":"")}
+              onClick={()=>toggleItem(deal.prodId)}
+              style={{borderColor:inList?"#163016":"#2A1800"}}>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:6}}>
+                <ChainLogo chainId={deal.store} size={18}/>
+                <div style={{background:inList?"#163016":"#2A1800",color:inList?"#6DBF6D":"#E8A020",fontSize:8,fontWeight:900,padding:"2px 6px",borderRadius:8,fontFamily:"'Source Sans 3',sans-serif"}}>
+                  -{deal.pct}%
+                </div>
+              </div>
+              <div style={{fontFamily:"'Source Sans 3',sans-serif",fontSize:10,color:"#B0A080",lineHeight:1.3,marginBottom:5,height:28,overflow:"hidden"}}>
+                {lang==="BG"?deal.labelBG:deal.label}
+              </div>
+              <div style={{display:"flex",alignItems:"baseline",gap:5,marginBottom:4}}>
+                <span style={{fontFamily:"'Playfair Display',serif",fontSize:16,fontWeight:900,color:inList?"#6DBF6D":"#E8C547"}}>{fmt(deal.newPrice)}</span>
+                <span style={{fontFamily:"'Source Sans 3',sans-serif",fontSize:10,color:"#2A3A55",textDecoration:"line-through"}}>{fmt(deal.oldPrice)}</span>
+              </div>
+              <div style={{display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                <div style={{fontSize:8,color:"#2A3A55",fontFamily:"'Source Sans 3',sans-serif"}}>
+                  {lang==="BG"?`${daysLeft} дни остават`:`${daysLeft}d left`}
+                </div>
+                <div style={{fontSize:10,color:inList?"#6DBF6D":"#2A3A55",fontWeight:800,fontFamily:"'Source Sans 3',sans-serif"}}>
+                  {inList?(lang==="BG"?"✓ В списъка":"✓ Added"):(lang==="BG"?"+ Добави":"+ Add")}
+                </div>
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ─── SHARE LIST PANEL ────────────────────────────────────────────────────────
+function SharePanel({listItems, storeBreakdown, activeArr, getQty, lang, onClose}){
+  const [copied, setCopied] = React.useState(false);
+
+  function buildShareText(){
+    const lines = [];
+    const date = new Date().toLocaleDateString(lang==="BG"?"bg-BG":"en-GB",{day:"numeric",month:"long"});
+    lines.push(lang==="BG"?`🛒 Моят Списък — Spesti (${date})`:`🛒 My Shopping List — Spesti (${date})`);
+    lines.push("");
+    storeBreakdown.forEach(store=>{
+      if(!store.items.length) return;
+      const total = store.items.reduce((s,p)=>s+(p.prices[store.id]||0)*getQty(p.id),0);
+      lines.push(`📍 ${store.name} — ${fmt(total)}`);
+      store.items.forEach(p=>{
+        const qty = getQty(p.id);
+        const name = lang==="BG"?p.nameBG:p.nameEN;
+        const price = fmt((p.prices[store.id]||0)*qty);
+        lines.push(`  ${qty>1?qty+"× ":""}${name} → ${price}`);
+      });
+      lines.push("");
+    });
+    // items not assigned to any store
+    const assignedIds = new Set(storeBreakdown.flatMap(s=>s.items.map(p=>p.id)));
+    const unassigned = listItems.filter(p=>!assignedIds.has(p.id));
+    if(unassigned.length){
+      lines.push(lang==="BG"?"📦 Останали:":"📦 Other items:");
+      unassigned.forEach(p=>{
+        const qty = getQty(p.id);
+        lines.push(`  ${qty>1?qty+"× ":""}${lang==="BG"?p.nameBG:p.nameEN}`);
+      });
+      lines.push("");
+    }
+    const total = listItems.reduce((s,p)=>s+(getBestPrice(p,activeArr)||0)*getQty(p.id),0);
+    lines.push(lang==="BG"?`💰 Общо оптимално: ${fmt(total)}`:`💰 Optimised total: ${fmt(total)}`);
+    lines.push(lang==="BG"?"Генерирано от spesti.bg":"via spesti.bg");
+    return lines.join("\n");
+  }
+
+  const text = buildShareText();
+
+  function copyToClipboard(){
+    if(navigator.clipboard){
+      navigator.clipboard.writeText(text).then(()=>{setCopied(true);setTimeout(()=>setCopied(false),2200);});
+    } else {
+      const ta = document.createElement("textarea");
+      ta.value = text; document.body.appendChild(ta); ta.select();
+      document.execCommand("copy"); document.body.removeChild(ta);
+      setCopied(true); setTimeout(()=>setCopied(false),2200);
+    }
+  }
+
+  const waText = encodeURIComponent(text);
+  const waUrl = `https://wa.me/?text=${waText}`;
+
+  return (
+    <div style={{position:"fixed",inset:0,background:"rgba(0,0,0,0.7)",zIndex:200,display:"flex",alignItems:"flex-end"}} onClick={onClose}>
+      <div style={{width:"100%",background:"#0A0F1A",borderRadius:"18px 18px 0 0",padding:"22px 20px 36px",maxWidth:600,margin:"0 auto"}} onClick={e=>e.stopPropagation()}>
+        <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:16}}>
+          <div style={{fontFamily:"'Playfair Display',serif",fontWeight:800,fontSize:17,color:"#EDE5D0"}}>
+            {lang==="BG"?"📤 Сподели Списъка":"📤 Share Your List"}
+          </div>
+          <button onClick={onClose} style={{background:"none",border:"none",color:"#3A4A65",fontSize:22,cursor:"pointer",lineHeight:1}}>×</button>
+        </div>
+
+        <div style={{background:"#060C18",border:"1px solid #131E30",borderRadius:10,padding:"11px 13px",marginBottom:14,maxHeight:180,overflowY:"auto"}}>
+          <pre style={{fontFamily:"'Source Sans 3',sans-serif",fontSize:11,color:"#4A5A75",lineHeight:1.6,whiteSpace:"pre-wrap",margin:0}}>{text}</pre>
+        </div>
+
+        <div style={{display:"flex",gap:10}}>
+          <a href={waUrl} target="_blank" rel="noopener" style={{flex:1,textDecoration:"none"}}>
+            <button className="share-btn" style={{width:"100%",justifyContent:"center"}}>
+              <span style={{fontSize:16}}>📱</span>
+              {lang==="BG"?"Изпрати в WhatsApp":"Send via WhatsApp"}
+            </button>
+          </a>
+          <button className="share-btn copy" onClick={copyToClipboard} style={{flex:1,justifyContent:"center"}}>
+            <span style={{fontSize:14}}>{copied?"✓":"📋"}</span>
+            {copied?(lang==="BG"?"Копирано!":"Copied!"):(lang==="BG"?"Копирай текст":"Copy text")}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ─── TREND PANEL ─────────────────────────────────────────────────────────────
+function TrendPanel({hist, lang}){
+  const chg = hist[hist.length-1] - hist[0];
+  const color = chg>0.005 ? "#E05050" : chg<-0.005 ? "#6DBF6D" : "#4A5A75";
+  const trendTxt = lang==="BG"
+    ? (chg>0.005 ? "↑ нагоре" : chg<-0.005 ? "↓ надолу" : "стабилно") + " пр. 8 седм."
+    : (chg>0.005 ? "↑ up" : chg<-0.005 ? "↓ down" : "stable") + " vs 8w ago";
+  const lowPrice = Math.min(...hist);
+  return (
+    <div style={{display:"flex",alignItems:"center",gap:10,marginBottom:12,padding:"8px 10px",background:"#0A1020",borderRadius:8}}>
+      <div style={{flex:1}}>
+        <div style={{fontSize:9,color:"#2A3A55",fontFamily:"'Source Sans 3',sans-serif",letterSpacing:"1.5px",textTransform:"uppercase",marginBottom:4}}>{lang==="BG"?"8-СЕДМИЧНА ТЕНДЕНЦИЯ":"8-WEEK TREND"}</div>
+        <Sparkline data={hist} width={120} height={28}/>
+      </div>
+      <div style={{textAlign:"right"}}>
+        <div style={{fontSize:11,fontWeight:700,color:color,fontFamily:"'Source Sans 3',sans-serif"}}>{trendTxt}</div>
+        <div style={{fontSize:9,color:"#1A2A40",fontFamily:"'Source Sans 3',sans-serif",marginTop:2}}>{lang==="BG"?"мин:":"low:"} {fmt(lowPrice)}</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── SPESTI SCORE CARD ────────────────────────────────────────────────────────
+function SpestiScoreCard({savings, worstTotal, listCount, lang}){
+  const sc = spestiScore(savings, worstTotal, listCount);
+  if(sc===null) return null;
+  const color = sc>=80 ? "#E8C547" : sc>=60 ? "#6DBF6D" : "#4A5A75";
+  const label = lang==="BG"
+    ? (sc>=80?"🏆 Отличен спестявач!":sc>=60?"👍 Добра ефективност":"💪 Има резерви")
+    : (sc>=80?"🏆 Excellent saver!":sc>=60?"👍 Good efficiency":"💪 Room to improve");
+  const hint = lang==="BG"
+    ? (sc<80?"Избери повече продукти от най-евтиния магазин":"Използваш Spesti като про")
+    : (sc<80?"Select more items at cheapest store to improve":"You're using Spesti like a pro");
+  return (
+    <div style={{display:"flex",alignItems:"center",gap:14,background:"linear-gradient(90deg,#0A0E1A,#080C16)",border:"1px solid #1A2540",borderRadius:12,padding:"14px 16px",marginBottom:16}}>
+      <div style={{textAlign:"center",flexShrink:0,minWidth:54}}>
+        <div style={{fontFamily:"'Playfair Display',serif",fontSize:40,fontWeight:900,color:color,lineHeight:1}}>{sc}</div>
+        <div style={{fontSize:7,color:"#1F2D45",fontFamily:"'Source Sans 3',sans-serif",letterSpacing:"2px",textTransform:"uppercase",marginTop:2}}>{lang==="BG"?"SPESTI РЕЗУЛТАТ":"SPESTI SCORE"}</div>
+      </div>
+      <div style={{width:1,height:44,background:"#131E30",flexShrink:0}}/>
+      <div style={{flex:1}}>
+        <div style={{fontFamily:"'Source Sans 3',sans-serif",fontSize:13,color:"#EDE5D0",fontWeight:700,marginBottom:5}}>{label}</div>
+        <div style={{background:"#131E30",borderRadius:4,height:5,marginBottom:4,overflow:"hidden"}}>
+          <div style={{width:sc+"%",height:"100%",background:color,borderRadius:4}}/>
+        </div>
+        <div style={{fontSize:10,color:"#2A3A55",fontFamily:"'Source Sans 3',sans-serif"}}>{hint}</div>
+      </div>
+    </div>
+  );
+}
+
+// ─── MAIN APP ─────────────────────────────────────────────────────────────────
+function Spesti(){
+  const [phase,setPhase]         = useState("welcome");
+  // onboarding: "location" step + pref steps
+  const [onboardStage,setOStage] = useState("location"); // "location" | "prefs"
+  const [step,setStep]           = useState(0);
+  const [prefs,setPrefs]         = useState({});
+  const [activeStores,setActive] = useState(new Set(STORE_IDS)); // which chains user shops at
+  const [userLoc,setUserLoc]     = useState(null);
+  const [lang,setLang]           = useState("BG");
+  const [view,setView]           = useState("list");
+  const [weeklyList,setList]     = useState(new Set(DEFAULT_LIST));
+  const [quantities,setQtys]     = useState({});
+  const [search,setSearch]       = useState("");
+  const [selCat,setSelCat]       = useState("All");
+  const [expandedId,setExpId]    = useState(null);
+  const [selStore,setSelStore]   = useState(null);
+  const [animIn,setAnimIn]       = useState(false);
+  const [watchlist,setWatch]     = useState(new Set());
+  const [sortMode,setSortMode]   = useState("savings");
+  const [showStoreMgr,setStoreMgr] = useState(false);
+  const [showShare,setShowShare]   = useState(false);
+  const [toast,setToast]           = useState(null);
+  const [appLoading,setAppLoading] = useState(true);
+
+  if (appLoading) {
+    return (
+      <div style={{display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",minHeight:"100vh",color:"#E8C547",fontFamily:"'Playfair Display',serif"}}>
+        <div style={{fontSize:48,marginBottom:16,animation:"pulse 1.5s infinite"}}>🛒</div>
+        <div style={{fontSize:24,fontWeight:800}}>{lang==="BG"?"Зареждане на Spesti…":"Loading Spesti…"}</div>
+        <div style={{fontSize:14,color:"#4A5A75",fontFamily:"'Source Sans 3',sans-serif",marginTop:8}}>{lang==="BG"?"Синхронизиране на цени от супермаркетите":"Fetching latest supermarket prices"}</div>
+      </div>
+    );
+  }
+
+  useEffect(()=>{ setTimeout(()=>setAnimIn(true),80); },[]);
+
+  const activeArr = [...activeStores];
+  const activeChains = ALL_CHAINS.filter(c=>activeStores.has(c.id));
+
+  const pname = prod => lang==="BG"?prod.nameBG:prod.nameEN;
+  const getQty = id => quantities[id]||1;
+  const toggleItem = id => setList(prev=>{ const nx=new Set(prev); nx.has(id)?nx.delete(id):nx.add(id); return nx; });
+  const toggleWatch = id => setWatch(prev=>{ const nx=new Set(prev); nx.has(id)?nx.delete(id):nx.add(id); return nx; });
+
+  const applyPrefs = prod=>{
+    const cp=prefs[prod.category]; if(!cp) return true;
+    if(!cp.anyBrand&&cp.brands.length>0&&!cp.brands.includes(prod.brand)) return false;
+    if(cp.excludedBrands?.includes(prod.brand)) return false;
+    if(!cp.anyFat&&cp.fats?.length>0&&prod.fatPct&&!cp.fats.includes(prod.fatPct)) return false;
+    if(cp.sizes?.length>0&&prod.size&&!cp.sizes.includes(prod.size)) return false;
+    return true;
+  };
+
+  // Only include products that have at least one price in user's active stores
+  const visibleProds = useMemo(()=>PRODUCTS.filter(p=>applyPrefs(p)&&activeArr.some(id=>p.prices[id]!=null)),[prefs,activeStores]);
+  const searchProds  = useMemo(()=>visibleProds.filter(p=>
+    (p.nameEN.toLowerCase().includes(search.toLowerCase())||p.nameBG.toLowerCase().includes(search.toLowerCase()))&&(selCat==="All"||p.category===selCat)
+  ),[visibleProds,search,selCat,lang]);
+
+  const listItems      = PRODUCTS.filter(p=>weeklyList.has(p.id));
+  const optimizedTotal = listItems.reduce((s,p)=>s+(getBestPrice(p,activeArr)||0)*getQty(p.id),0);
+  const worstTotal     = listItems.reduce((s,p)=>s+(getWorstPrice(p,activeArr)||0)*getQty(p.id),0);
+  const savings        = worstTotal-optimizedTotal;
+  const savingsPct     = worstTotal>0?((savings/worstTotal)*100).toFixed(0):0;
+
+  const storeBreakdown = activeChains.map(store=>{
+    const items=listItems.filter(p=>getBestStore(p,activeArr)===store.id&&p.prices[store.id]!=null);
+    const total=items.reduce((s,p)=>s+(p.prices[store.id]||0)*getQty(p.id),0);
+    const altTotal=items.reduce((s,p)=>s+(getWorstPrice(p,activeArr)||0)*getQty(p.id),0);
+    return {...store,items,total,storeSavings:altTotal-total};
+  }).filter(s=>s.items.length>0);
+
+  const sortedListProdsFor = cat => {
+    const items=visibleProds.filter(p=>p.category===cat&&(search===""||(p.nameEN.toLowerCase().includes(search.toLowerCase())||p.nameBG.toLowerCase().includes(search.toLowerCase()))));
+    if(sortMode==="savings") return [...items].sort((a,b)=>((getWorstPrice(b,activeArr)||0)-(getBestPrice(b,activeArr)||0))-((getWorstPrice(a,activeArr)||0)-(getBestPrice(a,activeArr)||0)));
+    if(sortMode==="price")   return [...items].sort((a,b)=>(getBestPrice(a,activeArr)||0)-(getBestPrice(b,activeArr)||0));
+    return [...items].sort((a,b)=>pname(a).localeCompare(pname(b)));
+  };
+
+  const cats=["All",...Object.keys(CAT_ICONS)];
+
+  // ── WELCOME ────────────────────────────────────────────────────────────────
+  if(phase==="welcome") return (
+    <div style={{minHeight:"100vh",background:"radial-gradient(ellipse at 18% 50%,#0B1E3A 0%,#05090F 65%)",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:28}}>
+      <style>{CSS}</style>
+      <div style={{maxWidth:460,textAlign:"center",width:"100%"}}>
+
+        {/* Language toggle — top right */}
+        <div style={{display:"flex",justifyContent:"flex-end",marginBottom:18}}>
+          <div className="lang-toggle">
+            <button className={"lang-btn"+(lang==="BG"?" active":"")} onClick={()=>setLang("BG")}>БГ</button>
+            <button className={"lang-btn"+(lang==="EN"?" active":"")} onClick={()=>setLang("EN")}>EN</button>
+          </div>
+        </div>
+
+        <div style={{fontSize:46,marginBottom:10}}>🛒</div>
+        <div style={{fontFamily:"'Playfair Display',serif",fontSize:46,fontWeight:900,color:"#E8C547",lineHeight:1}}>Spesti</div>
+        <div style={{fontFamily:"'Source Sans 3',sans-serif",fontSize:11,color:"#2A3A55",letterSpacing:"3px",textTransform:"uppercase",marginTop:7,marginBottom:10}}>
+          {lang==="BG"?"Смарт Пазаруване · България":"Smart Grocery Comparison · Bulgaria"}
+        </div>
+
+        <div style={{display:"flex",justifyContent:"center",gap:7,marginBottom:28,flexWrap:"wrap"}}>
+          {LIVE_CHAINS.map(s=><StoreBadge key={s.id} chainId={s.id} size={26} showName={true}/>)}
+        </div>
+
+        <div style={{background:"#0A1420",border:"1px solid #172030",borderRadius:14,padding:20,marginBottom:20,textAlign:"left"}}>
+          {lang==="BG"
+            ? [["📍","Открива магазините близо до теб и показва само наличните цени"],["💰","Показва точно колко спестяваш всяка седмица"],["🎯","Персонализирано по марки, мазнини и размери"],["📋","Изгражда седмичния ти списък → план за пазаруване по магазин"],["🔜","Още 4 вериги предстоят · 15+ до края на годината"]].map(([ic,tx])=>(
+              <div key={tx} style={{display:"flex",gap:12,alignItems:"flex-start",marginBottom:10,fontFamily:"'Source Sans 3',sans-serif",fontSize:13,color:"#6A7A90",lineHeight:1.4}}>
+                <span style={{fontSize:17,flexShrink:0}}>{ic}</span>{tx}
+              </div>
+            ))
+            : [["📍","Finds stores near you & shows only available prices"],["💰","Shows exactly how much you save every week"],["🎯","Personalised to your brands, fat % and sizes"],["📋","Builds your weekly list → store-by-store shopping plan"],["🔜","4 more chains coming · 15+ by end of year"]].map(([ic,tx])=>(
+              <div key={tx} style={{display:"flex",gap:12,alignItems:"flex-start",marginBottom:10,fontFamily:"'Source Sans 3',sans-serif",fontSize:13,color:"#6A7A90",lineHeight:1.4}}>
+                <span style={{fontSize:17,flexShrink:0}}>{ic}</span>{tx}
+              </div>
+            ))
+          }
+        </div>
+
+        <button onClick={()=>setPhase("onboarding")} style={{width:"100%",background:"#E8C547",border:"none",borderRadius:10,padding:"16px 28px",fontFamily:"'Source Sans 3',sans-serif",fontWeight:900,fontSize:15,color:"#09111F",cursor:"pointer",marginBottom:10}}>
+          {lang==="BG"?"🛒 Настрой Профила Си →":"🛒 Set Up My Profile →"}
+        </button>
+        <button onClick={()=>setPhase("app")} style={{width:"100%",background:"none",border:"1px solid #172030",borderRadius:10,padding:"12px 28px",fontFamily:"'Source Sans 3',sans-serif",fontWeight:600,fontSize:13,color:"#3A4A65",cursor:"pointer"}}>
+          {lang==="BG"?"Пропусни — разгледай всичко":"Skip — browse everything"}
+        </button>
+      </div>
+    </div>
+  );
+
+  // ── ONBOARDING ─────────────────────────────────────────────────────────────
+  if(phase==="onboarding"){
+    const totalSteps = ONBOARD_CATS.length + 1; // +1 for location step
+    const curStepNum = onboardStage==="location" ? 0 : step+1;
+    return (
+      <div style={{minHeight:"100vh",background:"#05090F",color:"#EDE5D0"}}>
+        <style>{CSS}</style>
+        <div style={{background:"#090F1D",borderBottom:"1px solid #131E30",padding:"12px 20px",display:"flex",alignItems:"center",gap:16}}>
+          <div style={{fontFamily:"'Playfair Display',serif",fontWeight:900,color:"#E8C547",fontSize:19}}>🛒 Spesti</div>
+          <div style={{flex:1}}>
+            <div style={{display:"flex",justifyContent:"space-between",marginBottom:4}}>
+              <span style={{fontSize:10,color:"#2A3A55",fontFamily:"'Source Sans 3',sans-serif",letterSpacing:"1px",textTransform:"uppercase"}}>
+                {onboardStage==="location"?(lang==="BG"?"Стъпка 1 — Твоите Магазини":"Step 1 — Your Stores"):(lang==="BG"?`Стъпка ${curStepNum+1} — ${ONBOARD_CATS[step]}`:`Step ${curStepNum+1} — ${ONBOARD_CATS[step]}`)}
+              </span>
+              <span style={{fontSize:10,color:"#E8C547",fontFamily:"'Source Sans 3',sans-serif",fontWeight:700}}>{curStepNum+1} / {totalSteps}</span>
+            </div>
+            <div style={{background:"#131E30",borderRadius:3,height:4}}>
+              <div style={{width:(((curStepNum+1)/totalSteps)*100)+"%",height:"100%",background:"#E8C547",borderRadius:3,transition:"width 0.3s"}}/>
+            </div>
+          </div>
+        </div>
+        <div style={{maxWidth:540,margin:"0 auto",padding:"26px 20px 60px"}} className="slidein">
+          {onboardStage==="location"
+            ? <NearbyStores userLoc={userLoc} activeStores={activeStores} setActiveStores={setActive}
+                lang={lang} onDone={()=>setOStage("prefs")}/>
+            : <OnboardStep cat={ONBOARD_CATS[step]} prefs={prefs} setPrefs={setPrefs} stepNum={step}
+                lang={lang} isLast={step===ONBOARD_CATS.length-1}
+                onNext={()=>{ if(step<ONBOARD_CATS.length-1)setStep(s=>s+1); else setPhase("app"); }}
+                onSkip={()=>{ if(step<ONBOARD_CATS.length-1)setStep(s=>s+1); else setPhase("app"); }}
+              />
+          }
+        </div>
+      </div>
+    );
+  }
+
+  // ── STORE MANAGER MODAL ────────────────────────────────────────────────────
+  if(showStoreMgr) return (
+    <div style={{minHeight:"100vh",background:"#05090F",color:"#EDE5D0"}}>
+      <style>{CSS}</style>
+      <div style={{background:"#090F1D",borderBottom:"1px solid #131E30",padding:"14px 20px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+        <div style={{fontFamily:"'Playfair Display',serif",fontWeight:900,color:"#E8C547",fontSize:19}}>{lang==="BG"?"🏪 Моите Магазини":"🏪 My Stores"}</div>
+        <button onClick={()=>setStoreMgr(false)} className="ctrl-btn">{lang==="BG"?"← Назад":"← Back"}</button>
+      </div>
+      <div style={{maxWidth:540,margin:"0 auto",padding:"24px 20px 60px"}}>
+        <NearbyStores userLoc={userLoc} activeStores={activeStores} setActiveStores={setActive} lang={lang} onDone={()=>setStoreMgr(false)}/>
+      </div>
+    </div>
+  );
+
+  // ── APP ────────────────────────────────────────────────────────────────────
+  return (
+    <div style={{minHeight:"100vh",background:"#05090F",color:"#EDE5D0"}}>
+      <style>{CSS}</style>
+      {showShare&&<SharePanel listItems={listItems} storeBreakdown={storeBreakdown} activeArr={activeArr} getQty={getQty} lang={lang} onClose={()=>setShowShare(false)}/>}
+      {toast&&<div className="toast">{toast}</div>}
+
+      {/* HEADER */}
+      <div style={{background:"#080E1C",borderBottom:"1px solid #131E30",position:"sticky",top:0,zIndex:100}}>
+        <div style={{maxWidth:920,margin:"0 auto",padding:"0 14px"}}>
+          <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",paddingTop:11,paddingBottom:3}}>
+            <div style={{display:"flex",alignItems:"center",gap:10}}>
+              <div>
+                <div style={{fontFamily:"'Playfair Display',serif",fontSize:21,fontWeight:900,color:"#E8C547",lineHeight:1}}>🛒 Spesti</div>
+                <div style={{fontSize:8,color:"#1F2D45",fontFamily:"'Source Sans 3',sans-serif",letterSpacing:"2px",textTransform:"uppercase",marginTop:1}}>Smart Grocery · Bulgaria</div>
+              </div>
+              {/* Active store logos */}
+              <div style={{display:"flex",gap:3,marginLeft:6}}>
+                {activeChains.slice(0,5).map(c=><ChainLogo key={c.id} chainId={c.id} size={20}/>)}{activeChains.length>5&&<span style={{fontSize:9,color:"#2A3A55",fontFamily:"'Source Sans 3',sans-serif",marginLeft:2}}>+{activeChains.length-5}</span>}
+              </div>
+            </div>
+            <div style={{display:"flex",alignItems:"center",gap:7}}>
+              {weeklyList.size>0&&<div style={{background:"#E8C547",color:"#09111F",borderRadius:"50%",width:20,height:20,fontSize:10,fontWeight:900,display:"flex",alignItems:"center",justifyContent:"center",fontFamily:"'Source Sans 3',sans-serif"}}>{weeklyList.size}</div>}
+              {watchlist.size>0&&<div style={{background:"#0D2A3A",border:"1px solid #1A5060",borderRadius:6,padding:"3px 7px",fontSize:9,color:"#4ABFD0",fontFamily:"'Source Sans 3',sans-serif",fontWeight:700}}>🔔 {watchlist.size}</div>}
+              {listItems.length>0&&<button onClick={()=>setShowShare(true)} className="ctrl-btn" style={{display:"flex",alignItems:"center",gap:4}}>📤</button>}
+              <button onClick={()=>setStoreMgr(true)} className="ctrl-btn" style={{display:"flex",alignItems:"center",gap:4}}>
+                🏪 <span style={{fontSize:10,fontWeight:800,color:"#E8C547"}}>{activeStores.size}</span>
+              </button>
+              <button onClick={()=>{setPhase("onboarding");setOStage("prefs");setStep(0);}} className="ctrl-btn">⚙</button>
+              <div className="lang-toggle">
+                <button className={"lang-btn"+(lang==="BG"?" active":"")} onClick={()=>setLang("BG")}>БГ</button>
+                <button className={"lang-btn"+(lang==="EN"?" active":"")} onClick={()=>setLang("EN")}>EN</button>
+              </div>
+            </div>
+          </div>
+          <div style={{display:"flex",overflowX:"auto",marginTop:4}}>
+            {(lang==="BG"?[["list","📋 Списък"],["search","🔍 Намери"],["storeview","🏪 Магазини"],["summary","💰 Спестявания"]]:[["list","📋 My List"],["search","🔍 Find Item"],["storeview","🏪 By Store"],["summary","💰 Savings"]]).map(([id,label])=>(
+              <button key={id} className={"nav-tab"+(view===id?" active":"")} onClick={()=>{setView(id);setExpId(null);}}>{label}</button>
+            ))}
+          </div>
+        </div>
+      </div>
+
+      <div style={{maxWidth:920,margin:"0 auto",padding:"20px 14px 64px"}} className={"fade"+(animIn?" in":"")}>
+
+        {/* ══ TAB: MY LIST ══ */}
+        {view==="list"&&<div>
+          <div style={{marginBottom:16}}>
+            <div style={{fontFamily:"'Playfair Display',serif",fontSize:21,fontWeight:800,marginBottom:3}}>{lang==="BG"?"Седмичен Списък":"Weekly Shopping List"}</div>
+            <div style={{fontSize:12,color:"#2A3A55",fontFamily:"'Source Sans 3',sans-serif"}}>
+              {lang==="BG"?`Сравняваме ${activeStores.size} магазина: ${activeChains.slice(0,4).map(c=>c.name).join(" · ")}${activeChains.length>4?" + "+(activeChains.length-4)+" още":""}`:(`Comparing ${activeStores.size} store${activeStores.size!==1?"s":""}: ${activeChains.slice(0,4).map(c=>c.name).join(" · ")}${activeChains.length>4?" + "+(activeChains.length-4)+" more":""}`)}
+            </div>
+          </div>
+
+          <WeeklyDeals activeStores={activeStores} weeklyList={weeklyList} toggleItem={toggleItem} lang={lang}/>
+
+          {listItems.length>0&&<div style={{background:"linear-gradient(90deg,#081A08,#061006)",border:"1px solid #163016",borderRadius:10,padding:"12px 15px",marginBottom:15,display:"flex",alignItems:"center",justifyContent:"space-between",flexWrap:"wrap",gap:10}}>
+            <div>
+              <div style={{fontSize:9,color:"#1A4010",fontFamily:"'Source Sans 3',sans-serif",letterSpacing:"2px",textTransform:"uppercase",marginBottom:2}}>{lang==="BG"?"ТАЗИ СЕДМИЦА":"THIS WEEK"}</div>
+              <span style={{fontFamily:"'Source Sans 3',sans-serif",fontSize:13,color:"#6DBF6D"}}>{lang==="BG"?`✓ ${listItems.length} продукта избрани`:`✓ ${listItems.length} items selected`}</span>
+            </div>
+            <div style={{display:"flex",gap:18,alignItems:"center"}}>
+              <div style={{textAlign:"right"}}>
+                <div style={{fontSize:9,color:"#1A4010",fontFamily:"'Source Sans 3',sans-serif",letterSpacing:"1px",textTransform:"uppercase"}}>{lang==="BG"?"Най-добра Сума":"Best Total"}</div>
+                <div style={{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:20,color:"#6DBF6D"}}>{fmt(optimizedTotal)}</div>
+              </div>
+              <div style={{width:1,height:30,background:"#1A3A1A"}}/>
+              <div style={{textAlign:"right"}}>
+                <div style={{fontSize:9,color:"#1A4010",fontFamily:"'Source Sans 3',sans-serif",letterSpacing:"1px",textTransform:"uppercase"}}>{lang==="BG"?"Спестяваш":"You Save"}</div>
+                <div style={{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:20,color:"#E8C547"}}>{fmt(savings)}</div>
+              </div>
+              <button onClick={()=>setView("storeview")} style={{background:"#E8C547",border:"none",borderRadius:7,padding:"7px 11px",fontFamily:"'Source Sans 3',sans-serif",fontWeight:800,fontSize:10,color:"#09111F",cursor:"pointer"}}>{lang==="BG"?"ПЛАН →":"PLAN →"}</button>
+            </div>
+          </div>}
+
+          <div style={{display:"flex",gap:6,flexWrap:"wrap",marginBottom:12,alignItems:"center"}}>
+            <button className="ctrl-btn" onClick={()=>setList(new Set(visibleProds.map(p=>p.id)))}>All</button>
+            <button className="ctrl-btn" onClick={()=>setList(new Set(DEFAULT_LIST))}>{lang==="BG"?"↺ По подразбиране":"↺ Default"}</button>
+            <button className="ctrl-btn" onClick={()=>setList(new Set())}>Clear</button>
+            <div style={{flex:1}}/>
+            <span style={{fontSize:9,color:"#2A3A55",fontFamily:"'Source Sans 3',sans-serif",letterSpacing:"1px"}}>{lang==="BG"?"СОРТИРАЙ:":"SORT:"}</span>
+            {[["savings","💰"],["price","€"],["az","A–Z"]].map(([m,lbl])=>(
+              <button key={m} className={"ctrl-btn"+(sortMode===m?" active":"")} onClick={()=>setSortMode(m)}>{lbl}</button>
+            ))}
+          </div>
+
+          <div style={{marginBottom:14}}><input className="inp" placeholder={lang==="BG"?"Търси в списъка…":"Search your list…"} value={search} onChange={e=>setSearch(e.target.value)}/></div>
+
+          {Object.keys(CAT_ICONS).map(cat=>{
+            const catProds=sortedListProdsFor(cat);
+            if(!catProds.length) return null;
+            const selCount=catProds.filter(p=>weeklyList.has(p.id)).length;
+            return (
+              <div key={cat} style={{marginBottom:20}}>
+                <div style={{fontSize:10,fontFamily:"'Source Sans 3',sans-serif",fontWeight:800,letterSpacing:"2px",textTransform:"uppercase",color:"#1F2D45",marginBottom:8,display:"flex",alignItems:"center",gap:6}}>
+                  <span>{CAT_ICONS[cat]}</span>{cat}<span style={{color:"#131E30",fontWeight:400,marginLeft:2}}>({selCount}/{catProds.length})</span>
+                </div>
+                <div style={{display:"flex",flexDirection:"column",gap:6}}>
+                  {catProds.map(prod=>{
+                    const isIn=weeklyList.has(prod.id);
+                    const bestId=getBestStore(prod,activeArr);
+                    const bestChain=ALL_CHAINS.find(c=>c.id===bestId)||{color:"#444",name:"?"};
+                    const qty=getQty(prod.id);
+                    const bp=getBestPrice(prod,activeArr);
+                    const wp=getWorstPrice(prod,activeArr);
+                    const unitSave=(wp||0)-(bp||0);
+                    return (
+                      <div key={prod.id} className={"icard"+(isIn?" inlist":"")} style={{display:"flex",alignItems:"center",gap:9,padding:"9px 11px"}}>
+                        <div className={"check-box"+(isIn?" chk":"")} onClick={()=>toggleItem(prod.id)}>
+                          {isIn&&<span style={{color:"#09111F",fontSize:12,fontWeight:900}}>✓</span>}
+                        </div>
+                        <img src={prod.img} alt={pname(prod)} onError={e=>e.target.style.display="none"} style={{width:40,height:40,objectFit:"contain",borderRadius:6,background:"#131E30",flexShrink:0}}/>
+                        <div style={{flex:1,minWidth:0}}>
+                          <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                            <span style={{fontFamily:"'Source Sans 3',sans-serif",fontWeight:700,fontSize:13,color:"#EDE5D0"}}>{pname(prod)}</span>
+                            {prod.sale&&prod.sale[bestId]&&<span className="sale-tag">SALE</span>}
+                          </div>
+                          <div style={{display:"flex",alignItems:"center",gap:6,marginTop:3,flexWrap:"wrap"}}>
+                            <StoreBadge chainId={bestId} size={15} showName={true}/>
+                            {perUnit(prod,activeArr)&&<span style={{fontSize:10,color:"#2A3A55",fontFamily:"'Source Sans 3',sans-serif"}}>{perUnit(prod,activeArr)}</span>}
+                            {unitSave>0.01&&isIn&&<span style={{fontSize:10,color:"#1A5010",fontFamily:"'Source Sans 3',sans-serif"}}>{lang==="BG"?`спести ${fmt(unitSave)}/бр`:`save ${fmt(unitSave)}/unit`}</span>}
+                          </div>
+                        </div>
+                        {isIn&&<div style={{display:"flex",alignItems:"center",gap:4}}>
+                          <button className="qty-btn" onClick={()=>setQtys(p=>({...p,[prod.id]:Math.max(1,qty-1)}))}>−</button>
+                          <span style={{fontSize:13,fontWeight:800,minWidth:20,textAlign:"center",fontFamily:"'Source Sans 3',sans-serif"}}>{qty}</span>
+                          <button className="qty-btn" onClick={()=>setQtys(p=>({...p,[prod.id]:qty+1}))}>+</button>
+                        </div>}
+                        <div style={{textAlign:"right",minWidth:60}}>
+                          <div style={{fontFamily:"'Playfair Display',serif",fontWeight:800,fontSize:15,color:isIn?"#E8C547":"#2A3A55"}}>{fmt((bp||0)*qty)}</div>
+                          <button className="watch-btn" onClick={()=>toggleWatch(prod.id)} style={{opacity:watchlist.has(prod.id)?1:0.4,color:watchlist.has(prod.id)?"#E8C547":"inherit"}}>
+                            {watchlist.has(prod.id)?"🔔":"🔕"}
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>}
+
+        {/* ══ TAB: FIND ITEM ══ */}
+        {view==="search"&&<div>
+          <div style={{fontFamily:"'Playfair Display',serif",fontSize:21,fontWeight:800,marginBottom:3}}>{lang==="BG"?"Намери Продукт":"Find a Product"}</div>
+          <div style={{fontSize:12,color:"#2A3A55",fontFamily:"'Source Sans 3',sans-serif",marginBottom:14}}>
+            {lang==="BG"?`Сравняваме ${activeChains.slice(0,4).map(c=>c.name).join(" · ")}${activeChains.length>4?" +"+(activeChains.length-4)+" още":""} · `:`Comparing ${activeChains.slice(0,4).map(c=>c.name).join(" · ")}${activeChains.length>4?" +"+(activeChains.length-4)+" more":""} · `}<button onClick={()=>setStoreMgr(true)} style={{background:"none",border:"none",color:"#4ABFD0",cursor:"pointer",fontFamily:"'Source Sans 3',sans-serif",fontSize:12,textDecoration:"underline",padding:0}}>{lang==="BG"?"промени магазини":"change stores"}</button>
+          </div>
+
+          <div style={{position:"relative",marginBottom:12}}>
+            <input className="inp" placeholder={lang==="BG"?"Търси… (мляко, говеждо, яйца, кафе)":"Search… (milk, beef, eggs, coffee)"} value={search} onChange={e=>{setSearch(e.target.value);setExpId(null);}}/>
+            {search&&<button onClick={()=>setSearch("")} style={{position:"absolute",right:12,top:"50%",transform:"translateY(-50%)",background:"none",border:"none",color:"#3A4A65",fontSize:20,cursor:"pointer"}}>×</button>}
+          </div>
+
+          <div style={{display:"flex",gap:6,overflowX:"auto",marginBottom:16,paddingBottom:3}}>
+            {cats.map(c=>(
+              <button key={c} className={"cat-pill"+(selCat===c?" active":"")} onClick={()=>setSelCat(c)}>
+                {c==="All"?"All":(CAT_ICONS[c]||"")+" "+c}
+              </button>
+            ))}
+          </div>
+
+          {selCat==="All"&&!search&&<WeeklyDeals activeStores={activeStores} weeklyList={weeklyList} toggleItem={toggleItem} lang={lang}/>}
+
+          {selCat==="All"&&!search&&<div style={{marginBottom:18}}>
+            <div style={{fontSize:10,color:"#4A3000",fontFamily:"'Source Sans 3',sans-serif",letterSpacing:"2px",textTransform:"uppercase",marginBottom:8}}>{lang==="BG"?"🔥 НА ПРОМОЦИЯ ТАЗИ СЕДМИЦА":"🔥 ON SALE THIS WEEK"}</div>
+            <div style={{display:"flex",gap:8,overflowX:"auto",paddingBottom:4}}>
+              {PRODUCTS.filter(p=>Object.values(p.sale).some(Boolean)&&applyPrefs(p)&&activeArr.some(id=>p.prices[id]!=null)).slice(0,8).map(prod=>{
+                const saleStore=activeChains.find(s=>prod.sale[s.id]);
+                return (
+                  <div key={prod.id} onClick={()=>setExpId(prod.id)} style={{flexShrink:0,width:92,background:"#1A1000",border:"1px solid #3A2800",borderRadius:10,padding:8,cursor:"pointer",textAlign:"center"}}>
+                    <img src={prod.img} alt={pname(prod)} onError={e=>e.target.style.display="none"} style={{width:44,height:44,objectFit:"contain",borderRadius:6,marginBottom:4}}/>
+                    <div style={{fontSize:10,color:"#B08020",fontFamily:"'Source Sans 3',sans-serif",fontWeight:700,lineHeight:1.2,marginBottom:3}}>{pname(prod).split(" ").slice(0,3).join(" ")}</div>
+                    <div style={{fontSize:13,color:"#6DBF6D",fontFamily:"'Playfair Display',serif",fontWeight:800}}>{fmt(getBestPrice(prod,activeArr))}</div>
+                    {saleStore&&<div style={{marginTop:3}}><ChainLogo chainId={saleStore.id} size={14}/></div>}
+                  </div>
+                );
+              })}
+            </div>
+          </div>}
+
+          {!searchProds.length&&<div style={{textAlign:"center",padding:"46px 20px",color:"#2A3A55",fontFamily:"'Source Sans 3',sans-serif"}}>
+            {lang==="BG"?"Няма намерени продукти.":"No products match."}<br/><button className="ctrl-btn" style={{marginTop:12}} onClick={()=>setPhase("onboarding")}>{lang==="BG"?"Настрой Предпочитания":"Adjust Preferences"}</button>
+          </div>}
+
+          <div style={{display:"flex",flexDirection:"column",gap:8}}>
+            {searchProds.map(prod=>{
+              const bestId=getBestStore(prod,activeArr);
+              const bp=getBestPrice(prod,activeArr);
+              const wp=getWorstPrice(prod,activeArr);
+              const isExp=expandedId===prod.id;
+              return (
+                <div key={prod.id} className={"icard"+(isExp?" exp":"")+(weeklyList.has(prod.id)?" inlist":"")}>
+                  <div style={{display:"flex",alignItems:"center",gap:10,padding:"11px 12px",cursor:"pointer"}} onClick={()=>setExpId(isExp?null:prod.id)}>
+                    <img src={prod.img} alt={pname(prod)} onError={e=>e.target.style.display="none"} style={{width:46,height:46,objectFit:"contain",borderRadius:7,background:"#131E30",flexShrink:0}}/>
+                    <div style={{flex:1,minWidth:0}}>
+                      <div style={{display:"flex",alignItems:"center",gap:6,flexWrap:"wrap"}}>
+                        <span style={{fontFamily:"'Source Sans 3',sans-serif",fontWeight:700,fontSize:13,color:"#EDE5D0"}}>{pname(prod)}</span>
+                        {prod.sale&&Object.values(prod.sale).some(Boolean)&&<span className="sale-tag">SALE</span>}
+                      </div>
+                      <div style={{display:"flex",alignItems:"center",gap:7,marginTop:3,flexWrap:"wrap"}}>
+                        <StoreBadge chainId={bestId} size={15} showName={true}/>
+                        {(wp||0)-(bp||0)>0.01&&<span style={{fontSize:11,color:"#1A5010",fontFamily:"'Source Sans 3',sans-serif"}}>save {fmt((wp||0)-(bp||0))}</span>}
+                        {perUnit(prod,activeArr)&&<span style={{fontSize:10,color:"#2A3A55",fontFamily:"'Source Sans 3',sans-serif"}}>{perUnit(prod,activeArr)}</span>}
+                      </div>
+                    </div>
+                    <div style={{textAlign:"right",flexShrink:0}}>
+                      <div style={{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:20,color:"#6DBF6D"}}>{fmt(bp)}</div>
+                      <div style={{color:"#2A3A55",fontSize:13,transition:"transform 0.2s",transform:isExp?"rotate(180deg)":"none",marginTop:1}}>⌄</div>
+                    </div>
+                  </div>
+                  {isExp&&<div style={{borderTop:"1px solid #131E30",background:"#070D1A",padding:"13px 12px"}}>
+                    {HIST[prod.id]&&<TrendPanel hist={HIST[prod.id]} lang={lang}/>}
+                    <PriceBar prod={prod} activeStores={activeStores} lang={lang}/>
+                    {SUBS[prod.id]&&<div style={{marginTop:10,padding:"8px 10px",background:"#0A1018",border:"1px solid #151E2A",borderRadius:8}}>
+                      <div style={{fontSize:9,color:"#2A3A55",fontFamily:"'Source Sans 3',sans-serif",letterSpacing:"1.5px",textTransform:"uppercase",marginBottom:6}}>{lang==="BG"?"💡 УМНИ ЗАМЕНИ":"💡 SMART SUBSTITUTES"}</div>
+                      <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                        {(SUBS[prod.id]||[]).map(subId=>{
+                          const sub=PRODUCTS.find(p=>p.id===subId);
+                          if(!sub) return null;
+                          const subBest=getBestPrice(sub,activeArr);
+                          const thisBest=getBestPrice(prod,activeArr);
+                          const diff=subBest&&thisBest?thisBest-subBest:null;
+                          return (
+                            <div key={subId} style={{background:"#101828",border:"1px solid #1A2A3A",borderRadius:8,padding:"6px 10px",cursor:"pointer"}} onClick={()=>setExpId(subId)}>
+                              <div style={{fontFamily:"'Source Sans 3',sans-serif",fontSize:11,color:"#EDE5D0"}}>{sub.nameEN.split(" ").slice(0,3).join(" ")}</div>
+                              <div style={{fontFamily:"'Playfair Display',serif",fontSize:13,fontWeight:800,color:diff&&diff>0?"#6DBF6D":"#E8C547",marginTop:2}}>
+                                {fmt(subBest)}{diff&&diff>0&&<span>{lang==="BG"?` · спести ${fmt(diff)}`:` · save ${fmt(diff)}`}</span>}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>}
+                    <div style={{display:"flex",gap:8,marginTop:10}}>
+                      <button onClick={()=>toggleItem(prod.id)} style={{flex:1,background:weeklyList.has(prod.id)?"#071A07":"#E8C547",color:weeklyList.has(prod.id)?"#6DBF6D":"#09111F",border:weeklyList.has(prod.id)?"1px solid #163016":"none",borderRadius:6,padding:"8px 13px",fontFamily:"'Source Sans 3',sans-serif",fontWeight:800,fontSize:12,cursor:"pointer"}}>
+                        {weeklyList.has(prod.id)?(lang==="BG"?"✓ В Списъка":"✓ In My List"):(lang==="BG"?"+ Добави":"+ Add to List")}
+                      </button>
+                      <button className="watch-btn" onClick={()=>toggleWatch(prod.id)} style={{background:"#0D1825",border:"1px solid #172030",borderRadius:6,padding:"8px 11px",fontSize:14,cursor:"pointer",opacity:watchlist.has(prod.id)?1:0.5,color:watchlist.has(prod.id)?"#E8C547":"inherit"}}>
+                        {watchlist.has(prod.id)?"🔔":"🔕"}
+                      </button>
+                    </div>
+                  </div>}
+                </div>
+              );
+            })}
+          </div>
+        </div>}
+
+        {/* ══ TAB: BY STORE ══ */}
+        {view==="storeview"&&<div>
+          <div style={{fontFamily:"'Playfair Display',serif",fontSize:21,fontWeight:800,marginBottom:3}}>{lang==="BG"?"План за Пазаруване по Магазин":"Shopping Plan by Store"}</div>
+          <div style={{fontSize:12,color:"#2A3A55",fontFamily:"'Source Sans 3',sans-serif",marginBottom:18}}>{lang==="BG"?"Натисни магазин, за да видиш продуктите":"Tap a store to see your items for that trip"}</div>
+
+          {listItems.length===0&&<div style={{textAlign:"center",padding:"40px 20px 32px",background:"#0A0F1A",border:"1px dashed #172030",borderRadius:14,marginBottom:20}}>
+            <div style={{fontSize:36,marginBottom:10}}>🛒</div>
+            <div style={{fontFamily:"'Playfair Display',serif",fontSize:17,fontWeight:800,color:"#EDE5D0",marginBottom:6}}>{lang==="BG"?"Списъкът е празен":"Your list is empty"}</div>
+            <div style={{fontSize:12,color:"#2A3A55",fontFamily:"'Source Sans 3',sans-serif",marginBottom:16}}>{lang==="BG"?"Добави продукти, за да видиш плана по магазин":"Add items to your list to see the store-by-store plan"}</div>
+            <button className="ctrl-btn" onClick={()=>setView("list")}>{lang==="BG"?"→ Към Списъка":"→ Go to My List"}</button>
+          </div>}
+
+          {listItems.length>0&&<div style={{display:"grid",gridTemplateColumns:"repeat(2,1fr)",gap:9,marginBottom:20}}>
+            {activeChains.map(store=>{
+              const storeItems=listItems.filter(p=>getBestStore(p,activeArr)===store.id&&p.prices[store.id]!=null);
+              const storeTotal=storeItems.reduce((s,p)=>s+(p.prices[store.id]||0)*getQty(p.id),0);
+              const isSel=selStore===store.id;
+              return (
+                <button key={store.id} onClick={()=>setSelStore(isSel?null:store.id)}
+                  style={{background:isSel?store.color+"20":"#0D1520",border:`2px solid ${isSel?store.color:"#172030"}`,borderRadius:12,padding:"13px 11px",cursor:"pointer",textAlign:"left",transition:"all 0.2s",width:"100%"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8,marginBottom:8}}>
+                    <ChainLogo chainId={store.id} size={28}/>
+                    <div style={{fontFamily:"'Playfair Display',serif",fontWeight:800,fontSize:14,color:isSel?store.color:"#EDE5D0"}}>{store.name}</div>
+                  </div>
+                  <div style={{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:22,color:isSel?store.color:"#6DBF6D"}}>{fmt(storeTotal)}</div>
+                  <div style={{fontSize:10,color:"#2A3A55",fontFamily:"'Source Sans 3',sans-serif",marginTop:2}}>{lang==="BG"?`${storeItems.length} продукта най-евтини тук`:`${storeItems.length} items cheapest here`}</div>
+                </button>
+              );
+            })}
+          </div>}
+
+          {selStore&&<SelectedStorePanel storeId={selStore} listItems={listItems} activeArr={activeArr} getQty={getQty} setQtys={setQtys} lang={lang}/>}
+
+          {!selStore&&listItems.length>0&&<div>
+            <div style={{fontSize:10,color:"#1F2D45",fontFamily:"'Source Sans 3',sans-serif",letterSpacing:"2px",textTransform:"uppercase",marginBottom:10}}>{lang==="BG"?"ПЪЛЕН ПРЕГЛЕД":"FULL BREAKDOWN"}</div>
+            {storeBreakdown.map(store=>(
+              <div key={store.id} style={{marginBottom:14}}>
+                <div style={{display:"flex",alignItems:"center",gap:9,marginBottom:7}}>
+                  <ChainLogo chainId={store.id} size={24}/>
+                  <span style={{fontFamily:"'Playfair Display',serif",fontWeight:800,fontSize:14,color:store.color}}>{store.name}</span>
+                  <span style={{fontSize:12,color:"#2A3A55",fontFamily:"'Source Sans 3',sans-serif"}}>· {fmt(store.total)}</span>
+                </div>
+                {store.items.map(prod=>(
+                  <div key={prod.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 10px",background:"#0D1520",border:`1px solid ${store.color}20`,borderRadius:8,marginBottom:4}}>
+                    <div style={{display:"flex",alignItems:"center",gap:7}}>
+                      <img src={prod.img} alt={pname(prod)} onError={e=>e.target.style.display="none"} style={{width:28,height:28,objectFit:"contain",borderRadius:4,background:"#131E30",flexShrink:0}}/>
+                      <span style={{fontFamily:"'Source Sans 3',sans-serif",fontSize:12,color:"#EDE5D0"}}>{pname(prod)}</span>
+                      {prod.sale&&prod.sale[store.id]&&<span className="sale-tag">SALE</span>}
+                    </div>
+                    <div style={{display:"flex",gap:10,alignItems:"center"}}>
+                      <span style={{fontSize:10,color:"#1F2D45",textDecoration:"line-through",fontFamily:"'Source Sans 3',sans-serif"}}>{fmt(getWorstPrice(prod,activeArr))}</span>
+                      <span style={{fontFamily:"'Playfair Display',serif",fontWeight:800,fontSize:13,color:"#6DBF6D"}}>{fmt(prod.prices[store.id])}</span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            ))}
+          </div>}
+        </div>}
+
+        {/* ══ TAB: SAVINGS ══ */}
+        {view==="summary"&&<div>
+          <div style={{fontFamily:"'Playfair Display',serif",fontSize:21,fontWeight:800,marginBottom:3}}>{lang==="BG"?"Твоят Доклад за Спестявания":"Your Savings Report"}</div>
+          <div style={{fontSize:12,color:"#2A3A55",fontFamily:"'Source Sans 3',sans-serif",marginBottom:18}}>{lang==="BG"?`Въз основа на ${activeStores.size} избрани магазина`:`Based on your ${activeStores.size} selected stores`}</div>
+
+          {!listItems.length?<div style={{textAlign:"center",padding:"56px 20px",color:"#1F2D45",fontFamily:"'Source Sans 3',sans-serif"}}>
+            {lang==="BG"?"Добави продукти в списъка, за да видиш спестяванията.":"Add items to your list to see savings."}<br/><button className="ctrl-btn" style={{marginTop:12}} onClick={()=>setView("list")}>{lang==="BG"?"Към Списъка":"Go to My List"}</button>
+          </div>:<>
+            <div style={{background:"linear-gradient(135deg,#071807,#050E05)",border:"1px solid #163016",borderRadius:16,padding:"26px 20px",textAlign:"center",marginBottom:20}}>
+              <div style={{fontSize:10,fontFamily:"'Source Sans 3',sans-serif",letterSpacing:"2.5px",textTransform:"uppercase",color:"#1A5010",marginBottom:7}}>{lang==="BG"?"ТАЗИ СЕДМИЦА СПЕСТЯВАШ":"THIS WEEK YOU SAVE"}</div>
+              <div style={{fontFamily:"'Playfair Display',serif",fontSize:58,fontWeight:900,color:"#6DBF6D",lineHeight:1}}>{fmt(savings)}</div>
+              <div style={{fontSize:13,color:"#1A5010",fontFamily:"'Source Sans 3',sans-serif",marginTop:7}}>{lang==="BG"?`${savingsPct}% по-евтино спрямо покупка в най-скъпия магазин`:`${savingsPct}% cheaper vs. buying everything at the priciest store`}</div>
+              <div style={{display:"flex",justifyContent:"center",gap:38,marginTop:20}}>
+                <div>
+                  <div style={{fontSize:9,color:"#0E4008",letterSpacing:"1.5px",textTransform:"uppercase",fontFamily:"'Source Sans 3',sans-serif"}}>{lang==="BG"?"Оптимална Сума":"Optimal Total"}</div>
+                  <div style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:800,color:"#6DBF6D"}}>{fmt(optimizedTotal)}</div>
+                </div>
+                <div style={{width:1,background:"#163016"}}/>
+                <div>
+                  <div style={{fontSize:9,color:"#0E4008",letterSpacing:"1.5px",textTransform:"uppercase",fontFamily:"'Source Sans 3',sans-serif"}}>{lang==="BG"?"Без Сравнение":"Without Comparing"}</div>
+                  <div style={{fontFamily:"'Playfair Display',serif",fontSize:22,fontWeight:800,color:"#E05050"}}>{fmt(worstTotal)}</div>
+                </div>
+              </div>
+              <div style={{marginTop:12,fontSize:11,color:"#0E4008",fontFamily:"'Source Sans 3',sans-serif"}}>
+                {lang==="BG"?"Годишни спестявания: ~":"Annual savings: ~"}<strong style={{color:"#6DBF6D",fontSize:13}}>{fmt(savings*52)}</strong>
+              </div>
+            </div>
+
+
+            <SpestiScoreCard savings={savings} worstTotal={worstTotal} listCount={listItems.length} lang={lang}/>
+            <div style={{fontSize:10,color:"#1F2D45",fontFamily:"'Source Sans 3',sans-serif",letterSpacing:"2px",textTransform:"uppercase",marginBottom:10}}>{lang==="BG"?"ПЛАН ЗА ПАЗАРУВАНЕ ТАЗИ СЕДМИЦА":"THIS WEEK'S SHOPPING PLAN"}</div>
+            <div style={{display:"flex",flexDirection:"column",gap:10,marginBottom:20}}>
+              {storeBreakdown.map(store=>(
+                <div key={store.id} style={{border:`1px solid ${store.color}28`,borderRadius:12,overflow:"hidden"}}>
+                  <div style={{background:`${store.color}18`,padding:"11px 14px",display:"flex",alignItems:"center",justifyContent:"space-between"}}>
+                    <div style={{display:"flex",alignItems:"center",gap:10}}>
+                      <ChainLogo chainId={store.id} size={28}/>
+                      <div>
+                        <div style={{fontFamily:"'Playfair Display',serif",fontWeight:800,fontSize:14,color:store.color}}>{store.name}</div>
+                        <div style={{fontSize:10,color:"#2A3A55",fontFamily:"'Source Sans 3',sans-serif"}}>{lang==="BG"?`${store.items.length} продукта · спести ${fmt(store.storeSavings)}`:`${store.items.length} item${store.items.length!==1?"s":""} · save ${fmt(store.storeSavings)}`}</div>
+                      </div>
+                    </div>
+                    <div style={{fontFamily:"'Playfair Display',serif",fontWeight:900,fontSize:19}}>{fmt(store.total)}</div>
+                  </div>
+                  <div style={{padding:"7px 14px"}}>
+                    {store.items.map(prod=>(
+                      <div key={prod.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"5px 0",borderBottom:"1px solid #0A0F1A"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:7}}>
+                          <img src={prod.img} alt={pname(prod)} onError={e=>e.target.style.display="none"} style={{width:26,height:26,objectFit:"contain",borderRadius:3,background:"#0D1520",flexShrink:0}}/>
+                          <span style={{fontFamily:"'Source Sans 3',sans-serif",fontSize:12,color:"#EDE5D0"}}>{pname(prod)}</span>
+                          {prod.sale&&prod.sale[store.id]&&<span className="sale-tag">SALE</span>}
+                        </div>
+                        <div style={{display:"flex",gap:10,alignItems:"center"}}>
+                          <span style={{fontSize:10,color:"#1F2D45",textDecoration:"line-through",fontFamily:"'Source Sans 3',sans-serif"}}>{fmt(getWorstPrice(prod,activeArr))}</span>
+                          <span style={{fontFamily:"'Playfair Display',serif",fontWeight:800,fontSize:13,color:"#6DBF6D"}}>{fmt(prod.prices[store.id])}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            <div style={{background:"#080E1C",border:"1px solid #131E30",borderRadius:12,padding:16,marginBottom:16}}>
+              <div style={{fontSize:10,fontFamily:"'Source Sans 3',sans-serif",fontWeight:800,letterSpacing:"2px",textTransform:"uppercase",color:"#1F2D45",marginBottom:12}}>{lang==="BG"?"ДЪЛГОСРОЧНА ПРОГНОЗА":"LONG-TERM PROJECTION"}</div>
+              <div style={{display:"flex",gap:8,flexWrap:"wrap"}}>
+                {(lang==="BG"?[["1 месец",4],["3 месеца",13],["6 месеца",26],["1 година",52]]:[["1 month",4],["3 months",13],["6 months",26],["1 year",52]]).map(([label,mult])=>(
+                  <div key={label} style={{flex:1,minWidth:84,background:"#0D1520",border:"1px solid #172030",borderRadius:8,padding:"10px 9px",textAlign:"center"}}>
+                    <div style={{fontSize:9,color:"#1F2D45",fontFamily:"'Source Sans 3',sans-serif",letterSpacing:"1px",textTransform:"uppercase",marginBottom:3}}>{label}</div>
+                    <div style={{fontFamily:"'Playfair Display',serif",fontSize:17,fontWeight:900,color:"#E8C547"}}>{fmt(savings*mult)}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            {watchlist.size>0&&<div style={{background:"#060D1A",border:"1px solid #0D2030",borderRadius:12,padding:14}}>
+              <div style={{fontSize:10,fontFamily:"'Source Sans 3',sans-serif",fontWeight:800,letterSpacing:"2px",textTransform:"uppercase",color:"#1A4050",marginBottom:10}}>{lang==="BG"?`🔔 ПРОСЛЕДЯВАНИ ЦЕНИ (${watchlist.size} продукта)`:`🔔 PRICE WATCHLIST (${watchlist.size} items)`}</div>
+              {PRODUCTS.filter(p=>watchlist.has(p.id)).map(prod=>(
+                <div key={prod.id} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"6px 0",borderBottom:"1px solid #0A1020"}}>
+                  <div style={{display:"flex",alignItems:"center",gap:8}}>
+                    <img src={prod.img} alt={pname(prod)} onError={e=>e.target.style.display="none"} style={{width:28,height:28,objectFit:"contain",borderRadius:4,background:"#0D1520",flexShrink:0}}/>
+                    <div>
+                      <div style={{fontFamily:"'Source Sans 3',sans-serif",fontSize:12,color:"#EDE5D0"}}>{pname(prod)}</div>
+                      <div style={{fontSize:10,color:"#2A5060",fontFamily:"'Source Sans 3',sans-serif",marginTop:1}}>{lang==="BG"?"Най-добро":"Best"}: {fmt(getBestPrice(prod,activeArr))} {lang==="BG"?"в":"at"} {ALL_CHAINS.find(c=>c.id===getBestStore(prod,activeArr))?.name||"?"}</div>
+                    </div>
+                  </div>
+                  <button onClick={()=>toggleWatch(prod.id)} style={{background:"none",border:"none",color:"#1A5060",cursor:"pointer",fontSize:14}}>✕</button>
+                </div>
+              ))}
+            </div>}
+          </>}
+        </div>}
+
+      </div>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<Spesti/>);
+  </script>
+</body>
+</html>
