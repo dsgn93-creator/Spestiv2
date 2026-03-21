@@ -1,0 +1,17 @@
+{
+  "name": "Spesti — Smart Grocery Comparison",
+  "short_name": "Spesti",
+  "description": "Compare grocery prices across supermarkets in Bulgaria",
+  "start_url": ".",
+  "display": "standalone",
+  "background_color": "#F5F0EB",
+  "theme_color": "#C4704B",
+  "icons": [
+    {
+      "src": "icons/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
